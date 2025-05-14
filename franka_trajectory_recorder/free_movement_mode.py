@@ -12,6 +12,7 @@ import select
 import tty
 import termios
 import h5py
+import numpy as np
 
 """Free Movement Mode / Teleoperation for Franka Emika Panda Robot for recording robot arm and gripper movements."""
 
@@ -45,11 +46,11 @@ class FreeMovementMode(Node):
 
         # Initialize gripper state
         self.gripper_state = None  # Will hold the gripper state dynamically
+        self.gripper_goal_state = 'open'  # Start with the gripper in the "open" state
 
         # Gripper control initialization
-        self.gripper_goal_state = 'unknown'  # 'open', 'closed', 'unknown'
         self.gripper_max_width = 0.08  # Max width for Franka Hand
-        self.gripper_speed = 0.05  # Default speed (m/s)
+        self.gripper_speed = 0.5  # Default speed (m/s)
         self.gripper_force = 30.0  # Default grasp force (N)
         self.gripper_epsilon_inner = 0.05  # Tolerance for successful grasp
         self.gripper_epsilon_outer = 0.05
@@ -89,14 +90,15 @@ class FreeMovementMode(Node):
                 timestamp = time.time()
 
                 # Extract joint positions
-                joint_positions = list(msg.position)[:7] # Only take the joint positions
+                joint_positions = list(msg.position)[:7]  # Only take the joint positions
                 # Add the gripper state
                 joint_positions.extend(self.gripper_state)
 
                 self.trajectory.append({
                     'timestamp': timestamp,
                     'joint_positions': joint_positions,
-                    'joint_velocities': msg.velocity
+                    'joint_velocities': msg.velocity,
+                    'gripper_state': self.gripper_goal_state  # Add gripper state to trajectory
                 })
 
     def gripper_state_callback(self, msg):
@@ -109,9 +111,6 @@ class FreeMovementMode(Node):
         old_settings = termios.tcgetattr(sys.stdin)
         tty.setcbreak(sys.stdin.fileno())
 
-        # Initialize gripper state
-        gripper_state = 'open'  # Start with the gripper in the "open" state
-
         try:
             while True:
                 if select.select([sys.stdin], [], [], 0.1)[0]:
@@ -121,13 +120,13 @@ class FreeMovementMode(Node):
                     elif key == 'f':  # Finish recording
                         self.finish_recording()
                     elif key == 'b':  # Foot pedal pressed
-                        # State machine for gripper state
-                        if gripper_state == 'open':
+                        # Toggle gripper state
+                        if self.gripper_goal_state == 'open':
                             self.close_gripper()
-                            gripper_state = 'closed'
-                        elif gripper_state == 'closed':
+                            self.gripper_goal_state = 'closed'
+                        elif self.gripper_goal_state == 'closed':
                             self.open_gripper()
-                            gripper_state = 'open'
+                            self.gripper_goal_state = 'open'
         finally:
             # Restore terminal settings
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
@@ -158,14 +157,15 @@ class FreeMovementMode(Node):
         with self.lock:
             # Save to CSV
             with open(self.save_path_csv, 'w', newline='') as csvfile:
-                fieldnames = ['timestamp', 'joint_positions', 'joint_velocities']
+                fieldnames = ['timestamp', 'joint_positions', 'joint_velocities', 'gripper_state']
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
                 for entry in self.trajectory:
                     writer.writerow({
                         'timestamp': entry['timestamp'],
                         'joint_positions': ','.join(map(str, entry['joint_positions'])),
-                        'joint_velocities': ','.join(map(str, entry['joint_velocities']))
+                        'joint_velocities': ','.join(map(str, entry['joint_velocities'])),
+                        'gripper_state': entry['gripper_state']
                     })
             self.get_logger().info(f"Trajectory saved to {self.save_path_csv}")
 
@@ -174,10 +174,12 @@ class FreeMovementMode(Node):
                 timestamps = [entry['timestamp'] for entry in self.trajectory]
                 joint_positions = [entry['joint_positions'] for entry in self.trajectory]
                 joint_velocities = [entry['joint_velocities'] for entry in self.trajectory]
+                gripper_states = [entry['gripper_state'] for entry in self.trajectory]
 
                 hdf5file.create_dataset('timestamps', data=timestamps)
                 hdf5file.create_dataset('joint_positions', data=joint_positions)
                 hdf5file.create_dataset('joint_velocities', data=joint_velocities)
+                hdf5file.create_dataset('gripper_state', data=np.string_(gripper_states))  # Save gripper state as strings
 
             self.get_logger().info(f"Trajectory saved to {self.save_path_hdf5}")
 
