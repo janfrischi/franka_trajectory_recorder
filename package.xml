@@ -1,0 +1,17 @@
+<package format="3">
+  <name>franka_trajectory_recorder</name>
+  <version>0.1.0</version>
+  <description>A package to record trajectories for the Franka Emika robot.</description>
+  <maintainer email="your_email@example.com">your_name</maintainer>
+  <license>Apache License 2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
