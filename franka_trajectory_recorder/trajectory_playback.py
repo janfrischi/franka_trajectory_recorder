@@ -23,10 +23,10 @@ class TrajectoryPlayback(Node):
 
         # Gripper parameters
         self.gripper_speed = 0.1  # Default speed (m/s)
-        self.gripper_force = 10.0  # Default grasp force (N)
+        self.gripper_force = 50.0  # Default grasp force (N)
         self.gripper_max_width = 0.08  # Maximum gripper width (m)
-        self.gripper_epsilon_inner = 0.005  # Inner tolerance for grasping
-        self.gripper_epsilon_outer = 0.005  # Outer tolerance for grasping
+        self.gripper_epsilon_inner = 0.5 # Inner tolerance for grasping
+        self.gripper_epsilon_outer = 0.5  # Outer tolerance for grasping
 
         # Publisher for joint positions
         self.joint_positions_publisher = self.create_publisher(

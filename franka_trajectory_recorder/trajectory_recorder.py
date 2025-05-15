@@ -18,14 +18,14 @@ import numpy as np
 
 class FreeMovementMode(Node):
     def __init__(self):
-        super().__init__('free_movement_mode')
+        super().__init__('trajectory_recorder')
         # Flags for recording and pausing
         self.recording = False
         self.paused = False
         # Initialize trajectory storage
         self.trajectory = []
-        self.save_path_csv = os.path.expanduser('~/trajectory.csv')
-        self.save_path_hdf5 = os.path.expanduser('~/trajectory.h5')
+        self.save_path_csv = os.path.expanduser('~/franka_ros2_ws/src/franka_trajectory_recorder/trajectories/trajectory.csv')
+        self.save_path_hdf5 = os.path.expanduser('~/franka_ros2_ws/src/franka_trajectory_recorder/trajectories/trajectory.h5')
         # Create a lock for thread safety
         self.lock = threading.Lock()
 
@@ -51,7 +51,7 @@ class FreeMovementMode(Node):
         # Gripper control initialization
         self.gripper_max_width = 0.08  # Max width for Franka Hand
         self.gripper_speed = 0.5  # Default speed (m/s)
-        self.gripper_force = 30.0  # Default grasp force (N)
+        self.gripper_force = 50.0  # Default grasp force (N)
         self.gripper_epsilon_inner = 0.05  # Tolerance for successful grasp
         self.gripper_epsilon_outer = 0.05
 
@@ -74,9 +74,7 @@ class FreeMovementMode(Node):
             "Press the following keys for corresponding actions:\n"
             "  [r] - Start/Pause recording\n"
             "  [f] - Finish recording and save trajectory\n"
-            "  [c] - Close the gripper\n"
-            "  [o] - Open the gripper\n"
-            "  [b] - Toggle gripper state (via foot pedal)\n"
+            "  [b] - Open/Close gripper state (via foot pedal)\n"
             "====================================================="
         )
 

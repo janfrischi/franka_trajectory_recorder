@@ -19,7 +19,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'free_movement_mode = franka_trajectory_recorder.free_movement_mode:main',
+            'trajectory_recorder = franka_trajectory_recorder.trajectory_recorder:main',
             'trajectory_playback = franka_trajectory_recorder.trajectory_playback:main'
         ],
     },
