@@ -16,7 +16,7 @@ import numpy as np
 
 """Free Movement Mode / Teleoperation for Franka Emika Panda Robot for recording robot arm and gripper movements."""
 
-class FreeMovementMode(Node):
+class TrajectoryRecorder(Node):
     def __init__(self):
         super().__init__('trajectory_recorder')
         # Flags for recording and pausing
@@ -24,6 +24,7 @@ class FreeMovementMode(Node):
         self.paused = False
         # Initialize trajectory storage
         self.trajectory = []
+        # Declare paths for saving trajectory
         self.save_path_csv = os.path.expanduser('~/franka_ros2_ws/src/franka_trajectory_recorder/trajectories/trajectory.csv')
         self.save_path_hdf5 = os.path.expanduser('~/franka_ros2_ws/src/franka_trajectory_recorder/trajectories/trajectory.h5')
         # Create a lock for thread safety
@@ -52,7 +53,8 @@ class FreeMovementMode(Node):
         self.gripper_max_width = 0.08  # Max width for Franka Hand
         self.gripper_speed = 0.5  # Default speed (m/s)
         self.gripper_force = 50.0  # Default grasp force (N)
-        self.gripper_epsilon_inner = 0.05  # Tolerance for successful grasp
+        # Gripper tolerance parameters
+        self.gripper_epsilon_inner = 0.05 
         self.gripper_epsilon_outer = 0.05
 
         # Action clients for gripper
@@ -226,7 +228,7 @@ class FreeMovementMode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = FreeMovementMode()
+    node = TrajectoryRecorder()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

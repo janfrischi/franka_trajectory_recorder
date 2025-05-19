@@ -22,13 +22,13 @@ class TrajectoryPlayback(Node):
         self.playback_rate = self.get_parameter('playback_rate').value
 
         # Gripper parameters
-        self.gripper_speed = 0.1  # Default speed (m/s)
+        self.gripper_speed = 0.5  # Default speed (m/s)
         self.gripper_force = 50.0  # Default grasp force (N)
         self.gripper_max_width = 0.08  # Maximum gripper width (m)
         self.gripper_epsilon_inner = 0.5 # Inner tolerance for grasping
         self.gripper_epsilon_outer = 0.5  # Outer tolerance for grasping
 
-        # Publisher for joint positions
+        # Publisher for joint positions -> Cartesian Impedance Controller subscription
         self.joint_positions_publisher = self.create_publisher(
             Float64MultiArray,
             '/trajectory_playback/joint_positions',
@@ -51,8 +51,9 @@ class TrajectoryPlayback(Node):
 
         # Prepare playback
         self.current_index = 0
-        self.previous_gripper_state = None  # Track the previous gripper state
+        self.previous_gripper_state = None
         self.timer = None
+        # Start playback
         self.start_playback()
 
     def load_trajectory(self, file_path):
@@ -91,11 +92,23 @@ class TrajectoryPlayback(Node):
         except Exception as e:
             self.get_logger().error(f"Error loading CSV file: {e}")
             return None
+        
+    def wait_for_action_server(self, client, name):
+        self.get_logger().info(f'Waiting for {name} action server...')
+        while not client.wait_for_server(timeout_sec=2.0) and rclpy.ok():
+            self.get_logger().info(f'{name} action server not available, waiting again...')
+        if rclpy.ok():
+            self.get_logger().info(f'{name} action server found.')
+        else:
+            self.get_logger().error(f'ROS shutdown while waiting for {name} server.')
+            raise SystemExit('ROS shutdown')
 
     def start_playback(self):
         timestamps = self.trajectory['timestamps']
+        # Caculate intervals based on timestamps
         intervals = np.diff(timestamps) / self.playback_rate
         self.intervals = np.append(intervals, intervals[-1])
+        # Every self.intervals[i] the callback will be called
         self.timer = self.create_timer(self.intervals[0], self.publish_next_point)
 
     def publish_next_point(self):
@@ -108,7 +121,7 @@ class TrajectoryPlayback(Node):
         joint_positions = self.trajectory['joint_positions'][self.current_index]
         current_gripper_state = self.trajectory['gripper_state'][self.current_index]
 
-        # Publish joint positions
+        # Publish joint positions to the /trajectory_playback/joint_positions topic
         msg = Float64MultiArray()
         msg.data = joint_positions.tolist()
         self.joint_positions_publisher.publish(msg)
@@ -119,6 +132,7 @@ class TrajectoryPlayback(Node):
 
         # Move to the next point
         self.current_index += 1
+        # Schedule the next point and cancel the previous timer
         if self.current_index < len(self.intervals):
             self.timer.cancel()
             self.timer = self.create_timer(self.intervals[self.current_index], self.publish_next_point)
@@ -130,6 +144,7 @@ class TrajectoryPlayback(Node):
             self.previous_gripper_state = current_gripper_state
             return
 
+        # Check if the gripper state has changed
         if self.previous_gripper_state != current_gripper_state:
             if current_gripper_state == 'open':
                 self.send_gripper_goal_open()
@@ -155,17 +170,6 @@ class TrajectoryPlayback(Node):
         goal_msg.epsilon.outer = self.gripper_epsilon_outer
         self.get_logger().info("Sending gripper CLOSE command...")
         self.grasp_client.send_goal_async(goal_msg)
-
-    def wait_for_action_server(self, client, name):
-        self.get_logger().info(f'Waiting for {name} action server...')
-        while not client.wait_for_server(timeout_sec=2.0) and rclpy.ok():
-            self.get_logger().info(f'{name} action server not available, waiting again...')
-        if rclpy.ok():
-            self.get_logger().info(f'{name} action server found.')
-        else:
-            self.get_logger().error(f'ROS shutdown while waiting for {name} server.')
-            raise SystemExit('ROS shutdown')
-
 
 def main(args=None):
     rclpy.init(args=args)
