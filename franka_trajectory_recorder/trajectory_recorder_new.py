@@ -23,6 +23,8 @@ class TrajectoryRecorderNew(Node):
         self.trajectory = []
         self.save_path_hdf5 = os.path.expanduser('~/franka_ros2_ws/src/franka_trajectory_recorder/trajectories/dataset.hdf5')
         self.lock = threading.Lock()
+        
+        # Initialize the robot root pose and velocity
         self.initial_state = {
             'joint_position': None,
             'joint_velocity': None,
@@ -30,7 +32,12 @@ class TrajectoryRecorderNew(Node):
             'root_velocity': None
         }
 
-        # Hardcoded rigid object data
+        # Initialize placeholders for latest joint positions and velocities
+        self.latest_joint_positions = None
+        self.latest_joint_velocities = None
+
+        # Hardcoded rigid object data - Implement vision system to get this data
+        # As soon as objects are grasped we can simply update the root_pose and root_velocity of the rigid objects to the ee pose and velocity
         self.rigid_objects = {
             'cube_1': {
                 'root_pose': np.array([[0.1, 0.2, 0.3, 0.0, 0.0, 0.0, 1.0]], dtype=np.float32),  # [x, y, z, qx, qy, qz, qw]
@@ -46,12 +53,14 @@ class TrajectoryRecorderNew(Node):
             }
         }
 
-        # Subscriptions
+        # ----------------------------- Initialize subscribers -----------------------------
+        # Joint state subscription
         self.joint_state_sub = self.create_subscription(
             JointState, 
             '/joint_states', 
             self.joint_state_callback, 
             10)
+        
         # Gripper state subscription
         self.gripper_subscription = self.create_subscription(
             JointState, 
@@ -78,7 +87,7 @@ class TrajectoryRecorderNew(Node):
         self.gripper_epsilon_inner = 0.05
         self.gripper_epsilon_outer = 0.05
 
-        # Action clients
+        # Action clients for gripper control
         self.homing_client = ActionClient(self, Homing, '/fr3_gripper/homing')
         self.move_client = ActionClient(self, Move, '/fr3_gripper/move')
         self.grasp_client = ActionClient(self, Grasp, '/fr3_gripper/grasp')
@@ -104,35 +113,43 @@ class TrajectoryRecorderNew(Node):
         # Start keyboard listener
         threading.Thread(target=self.keyboard_listener, daemon=True).start()
 
-    # Define all the callbacks
-
+    # ----------------------------- Callbacks -----------------------------
+    # Joint state callback -> Joint positions and velocities
     def joint_state_callback(self, msg):
+        # Store the latest joint positions and velocities
+        self.latest_joint_positions = list(msg.position)[:7]  # First 7 joint positions
+        self.latest_joint_velocities = list(msg.velocity)[:7]  # First 7 joint velocities
+
         if self.recording and not self.paused:
             with self.lock:
                 timestamp = time.time()
-                joint_positions = list(msg.position)[:7]  # Only take the joint positions
-                # Add the gripper state as a single value
+                
+                # Append the gripper position twice, gripper_state is from the gripper state callback
                 gripper_position = self.gripper_state[0] if isinstance(self.gripper_state, list) else 0.0
-                joint_positions.append(gripper_position)
-                joint_velocities = list(msg.velocity)[:7]
+                joint_positions = self.latest_joint_positions + [gripper_position, gripper_position]
+                
+                # Append the data to the trajectory
                 self.trajectory.append({
                     'timestamp': timestamp,
                     'joint_positions': joint_positions,
-                    'joint_velocities': joint_velocities,
-                    'gripper_state': self.gripper_goal_state  # Add gripper goal state
+                    'joint_velocities': self.latest_joint_velocities,
+                    'gripper_state': self.gripper_goal_state,
+                    'robot_root_pose': self.robot_root_pose,
+                    'robot_root_velocity': self.robot_root_velocity
                 })
-            self.get_logger().debug(f"Joint state recorded: {joint_positions}, {joint_velocities}")
+            self.get_logger().debug(f"Joint state recorded: {joint_positions}, {self.latest_joint_velocities}")
 
+    # Gripper state callback -> Gripper position
     def gripper_state_callback(self, msg):
         self.gripper_state = list(msg.position)  # Store the gripper state dynamically
         self.get_logger().debug(f"Gripper state updated: {self.gripper_state}")
 
 
-    # Frankas state callback
+    # Franka state callback -> Root pose and velocity
     def franka_state_callback(self, msg: FrankaRobotState):
-        # Extract root_pose (position + orientation as a 7-element array)
-        position = msg.o_t_ee.pose.position  # Access the position field
-        orientation = msg.o_t_ee.pose.orientation  # Access the orientation field
+        position = msg.o_t_ee.pose.position
+        orientation = msg.o_t_ee.pose.orientation
+        # Root pose is a 7-element array [x, y, z, qx, qy, qz, qw]
         self.robot_root_pose = np.array([
             position.x, position.y, position.z,
             orientation.x, orientation.y, orientation.z, orientation.w
@@ -172,13 +189,16 @@ class TrajectoryRecorderNew(Node):
             self.recording = True
             self.paused = False
             self.get_logger().info("Recording started.")
-            # Capture initial state
+
+            # Capture initial state of the robot when recording starts
             with self.lock:
-                if self.trajectory:
-                    self.initial_state['joint_position'] = self.trajectory[0]['joint_positions']
-                    self.initial_state['joint_velocity'] = self.trajectory[0]['joint_velocities']
+                if self.latest_joint_positions is not None and self.latest_joint_velocities is not None:
+                    self.initial_state['joint_position'] = self.latest_joint_positions + [self.gripper_state[0], self.gripper_state[0]]
+                    self.initial_state['joint_velocity'] = np.zeros(9, dtype=np.float32)
                     self.initial_state['root_pose'] = self.robot_root_pose
-                    self.initial_state['root_velocity'] = self.robot_root_velocity
+                    self.initial_state['root_velocity'] = np.zeros(6, dtype=np.float32)
+                else:
+                    self.get_logger().warning("No joint states available to initialize the recording.")
         elif self.recording and not self.paused:
             self.paused = True
             self.get_logger().info("Recording paused.")
@@ -195,6 +215,34 @@ class TrajectoryRecorderNew(Node):
         else:
             self.get_logger().info("No recording in progress to finish.")
 
+    # ----------------------------- Save trajectory to HDF5 -----------------------------
+    # The data is stored in the following structure:
+    # /data
+    #   ├── demo_0
+    #   │   ├── num_samples
+    #   │   ├── success
+    #   │   ├── actions
+    #   │   ├── initial_state
+    #   │   │   ├── articulation
+    #   │   │   │   ├── robot
+    #   │   │   │       ├── joint_position
+    #   │   │   │       ├── joint_velocity
+    #   │   │   │       ├── root_pose
+    #   │   │   │       ├── root_velocity
+    #   │   │       ├── rigid_object
+    #   │   │   │       ├── cube_1
+    #   │   │   │       ├── cube_2
+    #   │       │       ├── cube_3
+    #   │   ├── obs
+    #   │   │   ├── actions
+    #   │   │   ├── cube_orientations
+    #   │   │   ├── cube_positions
+    #   │   │   ├── eef_pos
+    #   │   │   ├── eef_quat
+    #   │   │   ├── gripper_pos
+    #   │   │   ├── joint_pos
+    #   │   │   ├── joint_vel
+    #   │   │   ├── object
     def save_trajectory(self):
         with self.lock:
             with h5py.File(self.save_path_hdf5, 'a') as hdf5file:
@@ -215,18 +263,22 @@ class TrajectoryRecorderNew(Node):
                 demo_group.attrs['num_samples'] = len(self.trajectory)
                 demo_group.attrs['success'] = np.bool_(True)
 
-                # Add the initial_state group
+                # Dynamically populate the 'actions' dataset
+                actions = [entry['joint_positions'][:7] for entry in self.trajectory]
+                demo_group.create_dataset('actions', data=np.array(actions, dtype=np.float32))
+
+                # -------------------------- Add the initial_state group --------------------------
                 initial_state = demo_group.create_group('initial_state')
                 articulation = initial_state.create_group('articulation')
                 robot = articulation.create_group('robot')
 
-                # Save joint_position with shape (1, 8)
+                # Save joint_position with shape (1, 9)
                 robot.create_dataset(
                     'joint_position',
                     data=np.expand_dims(np.array(self.initial_state['joint_position'], dtype=np.float32), axis=0)
                 )
 
-                # Save joint_velocity with shape (1, 7)
+                # Save joint_velocity with shape (1, 9)
                 robot.create_dataset(
                     'joint_velocity',
                     data=np.expand_dims(np.array(self.initial_state['joint_velocity'], dtype=np.float32), axis=0)
@@ -244,19 +296,18 @@ class TrajectoryRecorderNew(Node):
                     data=np.expand_dims(np.array(self.initial_state['root_velocity'], dtype=np.float32), axis=0)
                 )
 
-                # Add the rigid_object group
+                # -------------------------- Add the rigid_object group --------------------------
                 rigid_object = initial_state.create_group('rigid_object')
                 for name, data in self.rigid_objects.items():
                     cube = rigid_object.create_group(name)
                     cube.create_dataset('root_pose', data=data['root_pose'])
                     cube.create_dataset('root_velocity', data=data['root_velocity'])
 
-                # Add the obs group
+                # --------------------------- Add the obs group ----------------------------------             
                 obs = demo_group.create_group('obs')
                 num_samples = len(self.trajectory)
 
                 # Dynamically populate the 'actions' dataset
-                actions = [entry['joint_positions'] for entry in self.trajectory]
                 obs.create_dataset('actions', data=np.array(actions, dtype=np.float32))
 
                 # Dynamically populate the 'cube_orientations' and 'cube_positions' datasets
@@ -280,28 +331,46 @@ class TrajectoryRecorderNew(Node):
                 obs.create_dataset('cube_orientations', data=np.array(cube_orientations, dtype=np.float32))
                 obs.create_dataset('cube_positions', data=np.array(cube_positions, dtype=np.float32))
 
-                # Add placeholders for other datasets in the obs group
-                obs.create_dataset('eef_pos', data=np.zeros((num_samples, 3), dtype=np.float32))
-                obs.create_dataset('eef_quat', data=np.zeros((num_samples, 4), dtype=np.float32))
-                obs.create_dataset('gripper_pos', data=np.zeros((num_samples, 2), dtype=np.float32))
-                obs.create_dataset('joint_pos', data=np.zeros((num_samples, 9), dtype=np.float32))
-                obs.create_dataset('joint_vel', data=np.zeros((num_samples, 9), dtype=np.float32))
+                # Dynamically populate the 'eef_pos', 'eef_quat' datasets
+                # Extract x,y,z
+                eef_pos = [entry['robot_root_pose'][:3] for entry in self.trajectory]
+                # Extract qx,qy,qz,qw
+                eef_quat = [entry['robot_root_pose'][3:] for entry in self.trajectory]
+                # Create datasets
+                obs.create_dataset('eef_pos', data=np.array(eef_pos), dtype=np.float32)
+                obs.create_dataset('eef_quat', data=np.array(eef_quat), dtype=np.float32)
+
+                # Dynamically populate the 'gripper_pos' dataset
+                gripper_pos = [[entry['joint_positions'][-2], entry['joint_positions'][-1]] for entry in self.trajectory]
+                obs.create_dataset('gripper_pos', data=np.array(gripper_pos, dtype=np.float32))
+                
+                # Dynamically populate the 'joint_pos', 'joint_vel' datasets
+                joint_pos = [entry['joint_positions'] for entry in self.trajectory]
+                joint_vel = [entry['joint_velocities'] for entry in self.trajectory]
+                obs.create_dataset('joint_pos', data=np.array(joint_pos, dtype=np.float32))
+                obs.create_dataset('joint_vel', data=np.array(joint_vel, dtype=np.float32))
+
+                # ------------------------ Add the 'object' dataset --------------------------
+                # The object dataset in the obs group contains info about the stae of objects in the env at each timestep
+                # Dataset is storing information for three cubes each with 13 features
+                # The features are: [x, y, z, qx, qy, qz, qw, vx, vy, vz, wx, wy, wz]
                 obs.create_dataset('object', data=np.zeros((num_samples, 39), dtype=np.float32))
 
-                # Add the states group
-                states = demo_group.create_group('states')
-                articulation_states = states.create_group('articulation')
-                robot_states = articulation_states.create_group('robot')
-                robot_states.create_dataset('joint_position', data=np.zeros((num_samples, 9), dtype=np.float32))
-                robot_states.create_dataset('joint_velocity', data=np.zeros((num_samples, 9), dtype=np.float32))
-                robot_states.create_dataset('root_pose', data=np.zeros((num_samples, 7), dtype=np.float32))
-                robot_states.create_dataset('root_velocity', data=np.zeros((num_samples, 6), dtype=np.float32))
+                # # ------------------------ Add the 'states' dataset --------------------------
+                # # Fill with zeros to maintain compativility with the original code
+                # states = demo_group.create_group('states')
+                # articulation_states = states.create_group('articulation')
+                # robot_states = articulation_states.create_group('robot')
+                # robot_states.create_dataset('joint_position', data=np.zeros((num_samples, 9), dtype=np.float32))
+                # robot_states.create_dataset('joint_velocity', data=np.zeros((num_samples, 9), dtype=np.float32))
+                # robot_states.create_dataset('root_pose', data=np.zeros((num_samples, 7), dtype=np.float32))
+                # robot_states.create_dataset('root_velocity', data=np.zeros((num_samples, 6), dtype=np.float32))
 
-                rigid_object_states = states.create_group('rigid_object')
-                for name, data in self.rigid_objects.items():
-                    cube_states = rigid_object_states.create_group(name)
-                    cube_states.create_dataset('root_pose', data=np.tile(data['root_pose'], (num_samples, 1)))
-                    cube_states.create_dataset('root_velocity', data=np.tile(data['root_velocity'], (num_samples, 1)))
+                # rigid_object_states = states.create_group('rigid_object')
+                # for name, data in self.rigid_objects.items():
+                #     cube_states = rigid_object_states.create_group(name)
+                #     cube_states.create_dataset('root_pose', data=np.tile(data['root_pose'], (num_samples, 1)))
+                #     cube_states.create_dataset('root_velocity', data=np.tile(data['root_velocity'], (num_samples, 1)))
 
                 # Update the total number of samples in the data group
                 if 'total' in data_group.attrs:
