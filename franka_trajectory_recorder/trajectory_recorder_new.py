@@ -353,6 +353,7 @@ class TrajectoryRecorderNew(Node):
                 # ------------------------ Add the 'object' dataset --------------------------
                 # The object dataset in the obs group contains info about the stae of objects in the env at each timestep
                 # Dataset is storing information for three cubes each with 13 features
+                # Obtain the data from the vision system
                 # The features are: [x, y, z, qx, qy, qz, qw, vx, vy, vz, wx, wy, wz]
                 obs.create_dataset('object', data=np.zeros((num_samples, 39), dtype=np.float32))
 
