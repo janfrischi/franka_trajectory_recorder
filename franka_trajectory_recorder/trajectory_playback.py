@@ -7,7 +7,7 @@ import h5py
 import csv
 import os
 import numpy as np
-import time
+
 
 
 class TrajectoryPlayback(Node):
@@ -17,7 +17,8 @@ class TrajectoryPlayback(Node):
         # Declare and get parameters
         self.declare_parameter('file_path', '~/trajectory.h5')
         self.declare_parameter('playback_rate', 1.0)
-
+    
+        # Get file path and playback rate from parameters
         self.file_path = os.path.expanduser(self.get_parameter('file_path').value)
         self.playback_rate = self.get_parameter('playback_rate').value
 
@@ -65,6 +66,7 @@ class TrajectoryPlayback(Node):
             self.get_logger().error("Unsupported file format. Use .h5 or .csv.")
             return None
 
+    # Load trajectory data from HDF5 file
     def load_hdf5(self, file_path):
         try:
             with h5py.File(file_path, 'r') as hdf5_file:
@@ -76,6 +78,7 @@ class TrajectoryPlayback(Node):
             self.get_logger().error(f"Error loading HDF5 file: {e}")
             return None
 
+    # Load trajectory data from CSV file
     def load_csv(self, file_path):
         try:
             timestamps = []
@@ -105,10 +108,10 @@ class TrajectoryPlayback(Node):
 
     def start_playback(self):
         timestamps = self.trajectory['timestamps']
-        # Caculate intervals based on timestamps
+        # Calculate intervals based on timestamps
         intervals = np.diff(timestamps) / self.playback_rate
         self.intervals = np.append(intervals, intervals[-1])
-        # Every self.intervals[i] the callback will be called
+        # Every self.intervals[i] the self.publish_next_point will be called
         self.timer = self.create_timer(self.intervals[0], self.publish_next_point)
 
     def publish_next_point(self):
@@ -121,11 +124,11 @@ class TrajectoryPlayback(Node):
         joint_positions = self.trajectory['joint_positions'][self.current_index]
         current_gripper_state = self.trajectory['gripper_state'][self.current_index]
 
-        # Publish joint positions to the /trajectory_playback/joint_positions topic
+        # Publish joint positions to the /trajectory_playback/joint_positions topic -> Cartesian Impedance Controller subscription
         msg = Float64MultiArray()
         msg.data = joint_positions.tolist()
         self.joint_positions_publisher.publish(msg)
-        self.get_logger().info(f"Published joint positions: {joint_positions}")
+        self.get_logger().info(f"Published joint positions: {joint_positions} to /trajectory_playback/joint_positions")
 
         # Handle gripper state transition
         self.handle_gripper_state(current_gripper_state)

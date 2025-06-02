@@ -15,6 +15,9 @@ import termios
 import h5py
 import numpy as np
 
+"""Trajectory Recorder Node for Franka Emika Panda Robot with Joint and Pose Action Modes.
+The node is designed for Imitation Learning in IsaacSim / IsaacLab"""
+
 class TrajectoryRecorderNew(Node):
     def __init__(self):
         super().__init__('trajectory_recorder_new')
@@ -23,7 +26,7 @@ class TrajectoryRecorderNew(Node):
         self.declare_parameter('action_mode', 'joint')  # 'joint' or 'pose'
         self.action_mode = self.get_parameter('action_mode').get_parameter_value().string_value
         
-        # Validate action mode
+        # Validate action mode -> Joint or Position mode
         if self.action_mode not in ['joint', 'pose']:
             self.get_logger().error(f"Invalid action_mode: {self.action_mode}. Must be 'joint' or 'pose'.")
             raise ValueError(f"Invalid action_mode: {self.action_mode}")
@@ -52,10 +55,7 @@ class TrajectoryRecorderNew(Node):
         self.latest_joint_positions = None
         self.latest_joint_velocities = None
 
-        # Initialize the default positions of the robot arm
-        self.default_joints = np.array([0.0444, -0.1894, -0.1107, -2.5148, 0.0044, 2.3775, 0.6952, 0.0400, 0.0400])
-
-        # Hardcoded rigid object data
+        # Hardcoded rigid objects with their initial poses and velocities
         self.rigid_objects = {
             # blue cube
             'cube_1': {
@@ -74,15 +74,30 @@ class TrajectoryRecorderNew(Node):
             }
         }
 
-        # Subscribers
-        self.joint_state_sub = self.create_subscription(
-            JointState, '/joint_states', self.joint_state_callback, 10)
-        self.gripper_subscription = self.create_subscription(
-            JointState, '/fr3_gripper/joint_states', self.gripper_state_callback, 10)
-        self.franka_state = self.create_subscription(
-            FrankaRobotState, '/franka_robot_state_broadcaster/robot_state', self.franka_state_callback, 10)
+        # Subscriptions to joint states and gripper states
 
-        # Timer for sampling at 20 Hz
+        # Subsribe to joint states
+        self.joint_state_sub = self.create_subscription(
+            JointState, 
+            '/joint_states', 
+            self.joint_state_callback, 
+            10)
+        
+        # Subscribe to gripper state
+        self.gripper_subscription = self.create_subscription(
+            JointState, 
+            '/fr3_gripper/joint_states', 
+            self.gripper_state_callback, 
+            10)
+        
+        # Subscribe to Franka robot state (ee pose and velocity)
+        self.franka_state = self.create_subscription(
+            FrankaRobotState, 
+            '/franka_robot_state_broadcaster/robot_state', 
+            self.franka_state_callback, 
+            10)
+
+        # Timer for sampling at 20 Hz -> Call self.sample_trajectory every 0.05 seconds
         self.timer = self.create_timer(self.sampling_period, self.sample_trajectory)
 
         # Gripper state
@@ -123,10 +138,29 @@ class TrajectoryRecorderNew(Node):
         # Start keyboard listener
         threading.Thread(target=self.keyboard_listener, daemon=True).start()
 
+    # ----------------------------- Callbacks for subscriptions -----------------------------
+
     def joint_state_callback(self, msg):
         # Store the latest joint positions and velocities
         self.latest_joint_positions = list(msg.position)[:7]  # First 7 joint positions
         self.latest_joint_velocities = list(msg.velocity)[:7]  # First 7 joint velocities
+
+    def gripper_state_callback(self, msg):
+        self.gripper_state = list(msg.position)  # Store the gripper state dynamically
+        self.get_logger().debug(f"Gripper state updated: {self.gripper_state}")
+
+    def franka_state_callback(self, msg: FrankaRobotState):
+        # Get the ee-position and orientation from the FrankaRobotState message
+        position = msg.o_t_ee.pose.position
+        orientation = msg.o_t_ee.pose.orientation
+        # Set robot_root_pose
+        self.robot_root_pose = np.array([
+            position.x, position.y, position.z,
+            orientation.x, orientation.y, orientation.z, orientation.w
+        ], dtype=np.float32)
+        # TODO: Do we still have to populate this array?
+        self.robot_root_velocity = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32)
+        self.get_logger().debug(f"Updated root_pose: {self.robot_root_pose}, root_velocity: {self.robot_root_velocity}")
 
     def sample_trajectory(self):
         """Record trajectory data at a fixed rate (20 Hz)."""
@@ -147,20 +181,7 @@ class TrajectoryRecorderNew(Node):
                 })
             self.get_logger().debug(f"Sampled trajectory at {timestamp}: {self.latest_joint_positions}, {self.latest_joint_velocities}")
 
-    def gripper_state_callback(self, msg):
-        self.gripper_state = list(msg.position)  # Store the gripper state dynamically
-        self.get_logger().debug(f"Gripper state updated: {self.gripper_state}")
-
-    def franka_state_callback(self, msg: FrankaRobotState):
-        position = msg.o_t_ee.pose.position
-        orientation = msg.o_t_ee.pose.orientation
-        self.robot_root_pose = np.array([
-            position.x, position.y, position.z,
-            orientation.x, orientation.y, orientation.z, orientation.w
-        ], dtype=np.float32)
-        self.robot_root_velocity = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32)
-        self.get_logger().debug(f"Updated root_pose: {self.robot_root_pose}, root_velocity: {self.robot_root_velocity}")
-
+    # Action generation based on the selected action mode: 'joint' or 'pose'
     def generate_actions(self):
         """Generate actions based on the selected action mode."""
         actions = []
@@ -219,6 +240,7 @@ class TrajectoryRecorderNew(Node):
 
         return q_relative.tolist()
 
+    # Keyboard listener for user inputs
     def keyboard_listener(self):
         old_settings = termios.tcgetattr(sys.stdin)
         tty.setcbreak(sys.stdin.fileno())
@@ -305,6 +327,7 @@ class TrajectoryRecorderNew(Node):
                 # Ensure the /data group exists
                 if 'data' not in hdf5file:
                     data_group = hdf5file.create_group('data')
+                    # Set environment arguments for the dataset: Isaac-Stack-Cube-Franka-IK-Abs-v0 for pose mode & Isaac-Stack-Cube-Franka-v0 for joint mode
                     env_name = "Isaac-Stack-Cube-Franka-IK-Abs-v0" if self.action_mode == 'pose' else "Isaac-Stack-Cube-Franka-v0"
                     data_group.attrs['env_args'] = f'{{"env_name": "{env_name}", "type": 2}}'
                     data_group.attrs['total'] = 0
@@ -468,6 +491,7 @@ class TrajectoryRecorderNew(Node):
             self.get_logger().error(f'ROS shutdown while waiting for {name} server.')
             raise SystemExit('ROS shutdown')
 
+    # ----------------------------- Gripper control methods -----------------------------
     def home_gripper(self):
         self.get_logger().info("Sending homing goal...")
         goal_msg = Homing.Goal()

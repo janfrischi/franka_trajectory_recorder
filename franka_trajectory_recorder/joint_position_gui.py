@@ -13,7 +13,7 @@ class JointPositionSender(Node):
     def __init__(self, topic, publish_rate):
         super().__init__('joint_position_sender')
 
-        # Initialize joint positions
+        # Initialize joint positions to default values
         self.joint_positions = np.array([0.0444, -0.1894, -0.1107, -2.5148, 0.0044, 2.3775, 0.6952])
 
         # Create publisher
@@ -57,6 +57,17 @@ class JointPositionGUI(QWidget):
         self.inputs = []
 
         # Create sliders, labels, and input fields for each joint
+        # Joint limits for Franka FR3 robot (in radians)
+        joint_limits = [
+            (-2.7437, 2.7437),   # Joint 1
+            (-1.7837, 1.7837),   # Joint 2
+            (-2.9007, 2.9007),   # Joint 3
+            (-3.0421, -0.1518),  # Joint 4
+            (-2.8065, 2.8065),   # Joint 5
+            (0.5445, 4.5169),    # Joint 6
+            (-3.0159, 3.0159)    # Joint 7
+        ]
+        
         for i in range(7):
             joint_row_layout = QHBoxLayout()  # Layout for a single joint
 
@@ -64,14 +75,19 @@ class JointPositionGUI(QWidget):
             label.setFixedWidth(100)
 
             slider = QSlider(Qt.Horizontal)
-            slider.setMinimum(-314)  # -3.14 radians scaled by 100
-            slider.setMaximum(314)   # 3.14 radians scaled by 100
-            slider.setValue(int(self.node.joint_positions[i] * 100))
+            # Set slider limits based on actual joint limits (scaled by 1000 for better precision)
+            lower_limit, upper_limit = joint_limits[i]
+            slider.setMinimum(int(lower_limit * 1000))
+            slider.setMaximum(int(upper_limit * 1000))
+            
+            # Clamp initial position to joint limits
+            initial_pos = max(lower_limit, min(upper_limit, self.node.joint_positions[i]))
+            slider.setValue(int(initial_pos * 1000))
             slider.valueChanged.connect(self.update_joint_position_from_slider(i, label))
 
             input_field = QLineEdit()
             input_field.setFixedWidth(80)
-            input_field.setText(f"{self.node.joint_positions[i]:.2f}")
+            input_field.setText(f"{initial_pos:.3f}")
             input_field.editingFinished.connect(self.update_joint_position_from_input(i, slider, label))
 
             self.labels.append(label)
@@ -101,38 +117,70 @@ class JointPositionGUI(QWidget):
 
     def update_joint_position_from_slider(self, joint_index, label):
         def callback(value):
-            # Convert slider value to radians
-            position = value / 100.0
+            # Convert slider value to radians (scaled by 1000)
+            position = value / 1000.0
             self.node.joint_positions[joint_index] = position
-            label.setText(f"Joint {joint_index + 1}: {position:.2f}")
-            self.inputs[joint_index].setText(f"{position:.2f}")
+            label.setText(f"Joint {joint_index + 1}: {position:.3f}")
+            self.inputs[joint_index].setText(f"{position:.3f}")
         return callback
 
     def update_joint_position_from_input(self, joint_index, slider, label):
+        # Joint limits for validation
+        joint_limits = [
+            (-2.7437, 2.7437),   # Joint 1
+            (-1.7837, 1.7837),   # Joint 2
+            (-2.9007, 2.9007),   # Joint 3
+            (-3.0421, -0.1518),  # Joint 4
+            (-2.8065, 2.8065),   # Joint 5
+            (0.5445, 4.5169),    # Joint 6
+            (-3.0159, 3.0159)    # Joint 7
+        ]
+        
         def callback():
             try:
                 # Get the value from the input field
                 position = float(self.inputs[joint_index].text())
-                if -3.14 <= position <= 3.14:
+                lower_limit, upper_limit = joint_limits[joint_index]
+                
+                if lower_limit <= position <= upper_limit:
                     self.node.joint_positions[joint_index] = position
-                    slider.setValue(int(position * 100))
-                    label.setText(f"Joint {joint_index + 1}: {position:.2f}")
+                    slider.setValue(int(position * 1000))
+                    label.setText(f"Joint {joint_index + 1}: {position:.3f}")
                 else:
-                    self.inputs[joint_index].setText(f"{self.node.joint_positions[joint_index]:.2f}")
+                    # Reset to current valid value if out of range
+                    current_pos = self.node.joint_positions[joint_index]
+                    self.inputs[joint_index].setText(f"{current_pos:.3f}")
+                    self.node.get_logger().warning(f"Joint {joint_index + 1} position {position:.3f} is out of range [{lower_limit:.3f}, {upper_limit:.3f}]")
             except ValueError:
-                self.inputs[joint_index].setText(f"{self.node.joint_positions[joint_index]:.2f}")
+                # Reset to current valid value if invalid input
+                current_pos = self.node.joint_positions[joint_index]
+                self.inputs[joint_index].setText(f"{current_pos:.3f}")
         return callback
 
     def publish_joint_positions(self):
         self.node.publish_joint_positions()
 
     def reset_joint_positions(self):
+        # Joint limits for clamping
+        joint_limits = [
+            (-2.7437, 2.7437),   # Joint 1
+            (-1.7837, 1.7837),   # Joint 2
+            (-2.9007, 2.9007),   # Joint 3
+            (-3.0421, -0.1518),  # Joint 4
+            (-2.8065, 2.8065),   # Joint 5
+            (0.5445, 4.5169),    # Joint 6
+            (-3.0159, 3.0159)    # Joint 7
+        ]
+        
         # Reset all sliders, labels, and input fields to the default joint positions
         for i in range(7):
-            position = self.node.joint_positions[i]  # Default joint position
-            self.sliders[i].setValue(int(position * 100))  # Reset slider
-            self.labels[i].setText(f"Joint {i + 1}: {position:.2f}")  # Reset label
-            self.inputs[i].setText(f"{position:.2f}")  # Reset input field
+            # Clamp position to joint limits
+            lower_limit, upper_limit = joint_limits[i]
+            position = max(lower_limit, min(upper_limit, self.node.joint_positions[i]))
+            
+            self.sliders[i].setValue(int(position * 1000))  # Reset slider
+            self.labels[i].setText(f"Joint {i + 1}: {position:.3f}")  # Reset label
+            self.inputs[i].setText(f"{position:.3f}")  # Reset input field
 
         # Publish the reset joint positions
         self.node.publish_joint_positions()
