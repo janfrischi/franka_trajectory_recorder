@@ -22,16 +22,25 @@ class TrajectoryRecorderNew(Node):
     def __init__(self):
         super().__init__('trajectory_recorder_new')
         
-        # Declare parameters for action mode
+        # Declare parameters for action mode and object position mode
         self.declare_parameter('action_mode', 'joint')  # 'joint' or 'pose'
+        self.declare_parameter('object_mode', 'fixed')  # 'fixed' or 'manual'
+        
         self.action_mode = self.get_parameter('action_mode').get_parameter_value().string_value
+        self.object_mode = self.get_parameter('object_mode').get_parameter_value().string_value
         
         # Validate action mode -> Joint or Position mode
         if self.action_mode not in ['joint', 'pose']:
             self.get_logger().error(f"Invalid action_mode: {self.action_mode}. Must be 'joint' or 'pose'.")
             raise ValueError(f"Invalid action_mode: {self.action_mode}")
         
+        # Validate object mode -> Fixed or Manual mode
+        if self.object_mode not in ['fixed', 'manual']:
+            self.get_logger().error(f"Invalid object_mode: {self.object_mode}. Must be 'fixed' or 'manual'.")
+            raise ValueError(f"Invalid object_mode: {self.object_mode}")
+        
         self.get_logger().info(f"Action mode set to: {self.action_mode}")
+        self.get_logger().info(f"Object position mode set to: {self.object_mode}")
         
         self.recording = False
         self.paused = False
@@ -55,24 +64,8 @@ class TrajectoryRecorderNew(Node):
         self.latest_joint_positions = None
         self.latest_joint_velocities = None
 
-        # Hardcoded rigid objects with their initial poses and velocities
-        self.rigid_objects = {
-            # blue cube
-            'cube_1': {
-                'root_pose': np.array([[0.4, 0.2, 0.05, 0.0, 0.0, 0.0, 1.0]], dtype=np.float32),
-                'root_velocity': np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float32)
-            },
-            # red cube
-            'cube_2': {
-                'root_pose': np.array([[0.6, 0.3, 0.05, 0.0, 0.0, 0.0, 1.0]], dtype=np.float32),
-                'root_velocity': np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float32)
-            },
-            # green cube
-            'cube_3': {
-                'root_pose': np.array([[0.4, -0.2, 0.05, 0.0, 0.0, 0.0, 1.0]], dtype=np.float32),
-                'root_velocity': np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float32)
-            }
-        }
+        # Initialize rigid objects with default positions
+        self.initialize_rigid_objects()
 
         # Subscriptions to joint states and gripper states
 
@@ -125,18 +118,153 @@ class TrajectoryRecorderNew(Node):
         self.home_gripper()
 
         # Display instructions
-        self.get_logger().info(
-            f"\n================ Trajectory Recorder ({self.action_mode.upper()} mode) =================\n"
-            "Press the following keys for corresponding actions:\n"
-            "  [r] - Start/Pause recording\n"
-            "  [f] - Finish recording and save trajectory\n"
-            "  [b] - Open/Close gripper state\n"
-            f"Action format: {'Joint positions + gripper' if self.action_mode == 'joint' else 'End-effector pose + gripper'}\n"
-            "====================================================="
-        )
+        self.display_instructions()
 
         # Start keyboard listener
         threading.Thread(target=self.keyboard_listener, daemon=True).start()
+
+    def initialize_rigid_objects(self):
+        """Initialize rigid objects with default hardcoded positions."""
+        self.default_rigid_objects = {
+            # blue cube
+            'cube_1': {
+                'root_pose': np.array([[0.4, 0.2, 0.05, 0.0, 0.0, 0.0, 1.0]], dtype=np.float32),
+                'root_velocity': np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float32)
+            },
+            # red cube
+            'cube_2': {
+                'root_pose': np.array([[0.6, 0.3, 0.05, 0.0, 0.0, 0.0, 1.0]], dtype=np.float32),
+                'root_velocity': np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float32)
+            },
+            # green cube
+            'cube_3': {
+                'root_pose': np.array([[0.4, -0.2, 0.05, 0.0, 0.0, 0.0, 1.0]], dtype=np.float32),
+                'root_velocity': np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float32)
+            }
+        }
+        
+        # Start with default positions
+        self.rigid_objects = self.default_rigid_objects.copy()
+
+    def display_instructions(self):
+        """Display user instructions based on the current mode."""
+        mode_info = f"Action: {self.action_mode.upper()}, Objects: {self.object_mode.upper()}"
+        action_format = "Joint positions + gripper" if self.action_mode == 'joint' else "End-effector pose + gripper"
+        
+        instructions = f"""
+================ Trajectory Recorder ({mode_info}) =================
+Press the following keys for corresponding actions:
+  [r] - Start/Pause recording
+  [f] - Finish recording and save trajectory
+  [b] - Open/Close gripper state"""
+        
+        if self.object_mode == 'manual':
+            instructions += "\n  [o] - Set custom object positions before recording"
+        
+        instructions += f"""
+Action format: {action_format}
+Current object positions:"""
+        
+        for name, data in self.rigid_objects.items():
+            pos = data['root_pose'][0, :3]
+            instructions += f"\n  {name}: [{pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}]"
+        
+        instructions += "\n====================================================="
+        
+        self.get_logger().info(instructions)
+
+    def get_float_input(self, prompt, default_value=None):
+        """Get float input from user with validation and default value support."""
+        while True:
+            try:
+                if default_value is not None:
+                    user_input = input(f"{prompt} (default: {default_value:.3f}): ").strip()
+                    if user_input == "":
+                        return default_value
+                else:
+                    user_input = input(f"{prompt}: ").strip()
+                
+                return float(user_input)
+            except ValueError:
+                print("Invalid input. Please enter a valid number.")
+            except KeyboardInterrupt:
+                print("\nOperation cancelled by user.")
+                return None
+
+    def set_custom_object_positions(self):
+        """Interactive method to set custom object positions."""
+        print("\n" + "="*60)
+        print("CUSTOM OBJECT POSITION SETUP")
+        print("="*60)
+        print("Enter new positions for each cube.")
+        print("Press Enter to keep current position, or type 'skip' to skip this cube.")
+        print("Press Ctrl+C at any time to cancel and keep current positions.")
+        print("-"*60)
+        
+        try:
+            new_positions = {}
+            
+            cube_names = {
+                'cube_1': 'Blue Cube',
+                'cube_2': 'Red Cube', 
+                'cube_3': 'Green Cube'
+            }
+            
+            for cube_id, cube_name in cube_names.items():
+                print(f"\n{cube_name} ({cube_id}):")
+                current_pos = self.rigid_objects[cube_id]['root_pose'][0, :3]
+                print(f"Current position: [{current_pos[0]:.3f}, {current_pos[1]:.3f}, {current_pos[2]:.3f}]")
+                
+                # Ask if user wants to change this cube's position
+                change = input("Change position? (y/n/skip): ").strip().lower()
+                if change in ['n', 'no', 'skip']:
+                    new_positions[cube_id] = current_pos.copy()
+                    continue
+                elif change not in ['y', 'yes', '']:
+                    print("Invalid input. Skipping this cube.")
+                    new_positions[cube_id] = current_pos.copy()
+                    continue
+                
+                # Get new coordinates
+                print("Enter new coordinates:")
+                x = self.get_float_input("  X", current_pos[0])
+                if x is None:
+                    return  # User cancelled
+                
+                y = self.get_float_input("  Y", current_pos[1])
+                if y is None:
+                    return  # User cancelled
+                
+                z = self.get_float_input("  Z", current_pos[2])
+                if z is None:
+                    return  # User cancelled
+                
+                new_positions[cube_id] = np.array([x, y, z], dtype=np.float32)
+                print(f"  → New position: [{x:.3f}, {y:.3f}, {z:.3f}]")
+            
+            # Apply new positions
+            for cube_id, new_pos in new_positions.items():
+                self.rigid_objects[cube_id]['root_pose'][0, :3] = new_pos
+            
+            print("\n" + "="*60)
+            print("OBJECT POSITIONS UPDATED SUCCESSFULLY!")
+            print("="*60)
+            print("New object positions:")
+            for cube_id, cube_name in cube_names.items():
+                pos = self.rigid_objects[cube_id]['root_pose'][0, :3]
+                print(f"  {cube_name}: [{pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}]")
+            print("="*60)
+            
+        except KeyboardInterrupt:
+            print("\n\nOperation cancelled. Object positions unchanged.")
+        except Exception as e:
+            print(f"\nError occurred: {e}")
+            print("Object positions unchanged.")
+
+    def reset_to_default_positions(self):
+        """Reset object positions to default hardcoded values."""
+        self.rigid_objects = self.default_rigid_objects.copy()
+        self.get_logger().info("Object positions reset to default values.")
 
     # ----------------------------- Callbacks for subscriptions -----------------------------
 
@@ -259,6 +387,13 @@ class TrajectoryRecorderNew(Node):
                         elif self.gripper_goal_state == 'closed':
                             self.open_gripper()
                             self.gripper_goal_state = 'open'
+                    elif key == 'o' and self.object_mode == 'manual':
+                        # Temporarily restore terminal settings for input
+                        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+                        self.set_custom_object_positions()
+                        self.display_instructions()
+                        # Restore cbreak mode
+                        tty.setcbreak(sys.stdin.fileno())
         finally:
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
@@ -347,10 +482,16 @@ class TrajectoryRecorderNew(Node):
                 actions = self.generate_actions()
                 demo_group.create_dataset('actions', data=np.array(actions, dtype=np.float32))
 
-                # Log action format for debugging
+                # Log action format and object positions for debugging
                 if actions:
                     action_format = "Joint positions" if self.action_mode == 'joint' else "End-effector pose"
                     self.get_logger().info(f"Saved actions in {action_format} format. Action shape: {np.array(actions).shape}")
+                    
+                    # Log object positions used in this demo
+                    self.get_logger().info("Object positions used in this demo:")
+                    for name, data in self.rigid_objects.items():
+                        pos = data['root_pose'][0, :3]
+                        self.get_logger().info(f"  {name}: [{pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}]")
 
                 # -------------------------- Add the initial_state group --------------------------
                 initial_state = demo_group.create_group('initial_state')
