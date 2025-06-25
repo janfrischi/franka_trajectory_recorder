@@ -15,8 +15,9 @@ import termios
 import h5py
 import numpy as np
 
-"""Trajectory Recorder Node for Franka Emika Panda Robot with Joint and Pose Action Modes.
-The node is designed for Imitation Learning in IsaacSim / IsaacLab"""
+"""Real2Sim Trajectory Recorder Node for Franka Emika Panda Robot with Joint and Pose Action Modes.
+The node is designed to record expert trajectories on the physical Franka Robot.
+They can then be used for Imitation Learning in IsaacSim / IsaacLab."""
 
 class TrajectoryRecorderNew(Node):
     def __init__(self):
@@ -46,6 +47,7 @@ class TrajectoryRecorderNew(Node):
         self.paused = False
         self.trajectory = []
         self.save_path_hdf5 = os.path.expanduser('~/franka_ros2_ws/src/franka_trajectory_recorder/trajectories/dataset.hdf5')
+        self.save_path_csv = os.path.expanduser('~/franka_ros2_ws/src/franka_trajectory_recorder/trajectories/trajectory.csv')
         self.lock = threading.Lock()
 
         # Sampling rate (20 Hz)
@@ -128,17 +130,17 @@ class TrajectoryRecorderNew(Node):
         self.default_rigid_objects = {
             # blue cube
             'cube_1': {
-                'root_pose': np.array([[0.4, 0.2, 0.05, 0.0, 0.0, 0.0, 1.0]], dtype=np.float32),
+                'root_pose': np.array([[0.4, 0.2, 0.0203, 0.0, 0.0, 0.0, 1.0]], dtype=np.float32),
                 'root_velocity': np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float32)
             },
             # red cube
             'cube_2': {
-                'root_pose': np.array([[0.6, 0.3, 0.05, 0.0, 0.0, 0.0, 1.0]], dtype=np.float32),
+                'root_pose': np.array([[0.6, 0.3, 0.0203, 0.0, 0.0, 0.0, 1.0]], dtype=np.float32),
                 'root_velocity': np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float32)
             },
             # green cube
             'cube_3': {
-                'root_pose': np.array([[0.4, -0.2, 0.05, 0.0, 0.0, 0.0, 1.0]], dtype=np.float32),
+                'root_pose': np.array([[0.4, -0.2, 0.0203, 0.0, 0.0, 0.0, 1.0]], dtype=np.float32),
                 'root_velocity': np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float32)
             }
         }
@@ -424,9 +426,66 @@ Current object positions:"""
             self.recording = False
             self.paused = False
             self.get_logger().info("Recording finished. Saving trajectory...")
+            self.save_trajectory_csv()
             self.save_trajectory()
         else:
             self.get_logger().info("No recording in progress to finish.")
+
+    def save_trajectory_csv(self):
+        """Save trajectory data to CSV format supporting both joint and pose modes."""
+        with self.lock:
+            if not self.trajectory:
+                self.get_logger().warning("No trajectory data to save to CSV.")
+                return
+
+            try:
+                with open(self.save_path_csv, 'w', newline='') as csvfile:
+                    if self.action_mode == 'joint':
+                        # Joint mode CSV format
+                        fieldnames = [
+                            'timestamp', 'joint_positions', 'joint_velocities', 
+                            'gripper_action', 'gripper_goal_state'
+                        ]
+                        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                        writer.writeheader()
+                        
+                        for entry in self.trajectory:
+                            writer.writerow({
+                                'timestamp': entry['timestamp'],
+                                'joint_positions': ','.join(map(str, entry['joint_positions'])),
+                                'joint_velocities': ','.join(map(str, entry['joint_velocities'])),
+                                'gripper_action': entry['gripper_action'],
+                                'gripper_goal_state': 'open' if entry['gripper_action'] == 1.0 else 'closed'
+                            })
+                    
+                    elif self.action_mode == 'pose':
+                        # Pose mode CSV format
+                        fieldnames = [
+                            'timestamp', 'joint_positions', 'joint_velocities',
+                            'eef_position', 'eef_orientation', 'gripper_action', 'gripper_goal_state'
+                        ]
+                        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                        writer.writeheader()
+                        
+                        for entry in self.trajectory:
+                            pose = entry['robot_root_pose']
+                            eef_pos = pose[:3]  # x, y, z
+                            eef_orient = pose[3:]  # qx, qy, qz, qw
+                            
+                            writer.writerow({
+                                'timestamp': entry['timestamp'],
+                                'joint_positions': ','.join(map(str, entry['joint_positions'])),
+                                'joint_velocities': ','.join(map(str, entry['joint_velocities'])),
+                                'eef_position': ','.join(map(str, eef_pos)),
+                                'eef_orientation': ','.join(map(str, eef_orient)),
+                                'gripper_action': entry['gripper_action'],
+                                'gripper_goal_state': 'open' if entry['gripper_action'] == 1.0 else 'closed'
+                            })
+
+                self.get_logger().info(f"Trajectory saved to CSV: {self.save_path_csv} in {self.action_mode} mode")
+                
+            except Exception as e:
+                self.get_logger().error(f"Failed to save CSV trajectory: {e}")
 
     # ----------------------------- Save trajectory to HDF5 -----------------------------
     # The data is stored in the following structure:
@@ -444,7 +503,7 @@ Current object positions:"""
     #   │   │   │       ├── root_velocity
     #   │   │       ├── rigid_object
     #   │   │   │       ├── cube_1
-    #   │   │   │       ├── cube_2
+    #   │       │       ├── cube_2
     #   │       │       ├── cube_3
     #   │   ├── obs
     #   │   │   ├── actions
