@@ -14,7 +14,7 @@ class TrajectoryPlayback(Node):
         super().__init__('trajectory_playback')
 
         # Declare and get parameters
-        self.declare_parameter('file_path', '~/trajectory.h5')
+        self.declare_parameter('file_path', '~/trajectory.hdf5')
         self.declare_parameter('playback_rate', 1.0)
         self.declare_parameter('control_mode', 'joint')  # 'joint' or 'pose'
     
@@ -46,7 +46,7 @@ class TrajectoryPlayback(Node):
         elif self.control_mode == 'pose':
             self.pose_publisher = self.create_publisher(
                 Float64MultiArray,
-                '/cartesian_position_controller/commands',
+                '/cartesian_position_controller/commands', # Imitation Learning Topic
                 10
             )
             self.get_logger().info("Initialized pose control mode")
