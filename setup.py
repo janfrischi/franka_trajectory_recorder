@@ -22,7 +22,11 @@ setup(
             'trajectory_recorder = franka_trajectory_recorder.trajectory_recorder:main',
             'trajectory_recorder_new = franka_trajectory_recorder.trajectory_recorder_new:main',
             'trajectory_playback = franka_trajectory_recorder.trajectory_playback:main',
-            'joint_position_sender = franka_trajectory_recorder.joint_position_sender:main'
+            'trajectory_playback_with_recording = franka_trajectory_recorder.trajectory_playback_with_recording:main',
+            'joint_position_sender = franka_trajectory_recorder.joint_position_sender:main',
+            'trajectory_playback_dynamic = franka_trajectory_recorder.trajectory_playback_dynamics:main',
+            'multi_trajectory_playback_with_recording = franka_trajectory_recorder.multi_trajectory_playback_with_recording:main',
+            'dynamics_replacer = franka_trajectory_recorder.dynamics_replacer:main',
         ],
     },
 )
