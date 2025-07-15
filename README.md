@@ -6,7 +6,7 @@ A comprehensive ROS2 package for recording expert demonstrations, analyzing traj
 
 This package provides a complete workflow for collecting and analyzing robot trajectories for imitation learning in NVIDIA IsaacLab:
 
-1. **Record Expert Demonstrations** - Capture human demonstrations using impedance control
+1. **Record Expert Demonstrations** - Capture human demonstrations on the real Franka Robot in Free-Float mode
 2. **Playback & Record Dynamics** - Play back trajectories while recording actual robot motion
 3. **Replace Actions with Real Dynamics** - Update datasets with real robot behavior
 4. **Analyze Trajectory Performance** - Visualize tracking errors and performance metrics
@@ -17,7 +17,7 @@ This package provides a complete workflow for collecting and analyzing robot tra
 
 ### 1. Record Expert Demonstrations
 
-Record human demonstrations using the advanced trajectory recorder for imitation learning:
+Record human demonstrations using the trajectory recorder for imitation learning:
 
 ```bash
 # Start the cartesian impedance controller
@@ -26,7 +26,7 @@ ros2 launch cartesian_impedance_control cartesian_impedance_controller.launch.py
 # Enable free movement mode for teleoperation
 ros2 param set /cartesian_impedance_controller free_movement_mode true
 
-# Record demonstrations (pose mode recommended for imitation learning)
+# Record demonstrations (pose mode recommended for imitation learning environements)
 ros2 run franka_trajectory_recorder trajectory_recorder --ros-args -p action_mode:=pose -p object_mode:=manual
 ```
 
@@ -46,7 +46,7 @@ Play back expert demonstrations while recording actual robot motion to capture t
 
 ```bash
 # Enable trajectory playback mode
-ros2 param set /cartesian_impedance_controller trajectory_playback_mode true
+ros2 ros2 param set /cartesian_impedance_controller imitation_learning_mode true
 
 # Play back all demos and record actual robot dynamics
 ros2 run franka_trajectory_recorder multi_trajectory_playback_with_recording \
@@ -150,7 +150,7 @@ The package creates datasets specifically formatted for NVIDIA IsaacLab imitatio
 
 **Imitation Learning Pipeline:**
 1. Record expert demonstrations on real robot using this package
-2. Train BC/ACT policies in IsaacLab using the generated datasets
+2. Train BC policies in IsaacLab using the generated datasets
 3. Deploy trained policies back to the real robot via the franka_rl_bridge package
 
 Object positions recorded in manual mode can be used to configure simulation environments with matching layouts for better sim-to-real transfer.
@@ -161,10 +161,10 @@ Object positions recorded in manual mode can be used to configure simulation env
 # 1. Record expert demonstrations for IsaacLab
 ros2 launch cartesian_impedance_control cartesian_impedance_controller.launch.py &
 ros2 param set /cartesian_impedance_controller free_movement_mode true
-ros2 run franka_trajectory_recorder trajectory_recorder --ros-args -p action_mode:=pose
+ros2 run franka_trajectory_recorder trajectory_recorder --ros-args -p action_mode:=pose -p object_mode:=manual
 
 # 2. Play back and record dynamics
-ros2 param set /cartesian_impedance_controller trajectory_playback_mode true
+ros2 param set /cartesian_impedance_controller imitation_learning_mode  true
 ros2 run franka_trajectory_recorder multi_trajectory_playback_with_recording \
     --ros-args -p file_path:=~/franka_ros2_ws/src/franka_trajectory_recorder/trajectories/dataset.hdf5
 
@@ -197,4 +197,4 @@ colcon build --packages-select franka_trajectory_recorder
 source install/setup.bash
 ```
 
-This workflow enables collection of expert demonstrations, analysis of robot tracking performance, and creation of realistic datasets that capture actual robot dynamics for improved imitation learning in
+This workflow enables collection of expert demonstrations, analysis of robot tracking performance, and creation of realistic datasets that capture actual robot dynamics for improved imitation learning in NVIDIA IsaacLab environments.
