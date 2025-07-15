@@ -20,7 +20,6 @@ setup(
     entry_points={
         'console_scripts': [
             'trajectory_recorder = franka_trajectory_recorder.trajectory_recorder:main',
-            'trajectory_recorder_new = franka_trajectory_recorder.trajectory_recorder_new:main',
             'trajectory_playback = franka_trajectory_recorder.trajectory_playback:main',
             'trajectory_playback_with_recording = franka_trajectory_recorder.trajectory_playback_with_recording:main',
             'joint_position_sender = franka_trajectory_recorder.joint_position_sender:main',

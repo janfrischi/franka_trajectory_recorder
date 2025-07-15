@@ -136,9 +136,11 @@ class TrajectoryComparison:
             y=self.data['ref_eef_pos_y'],
             z=self.data['ref_eef_pos_z'],
             mode='lines+markers',
-            line=dict(color='blue', width=4),
-            marker=dict(size=3, color='blue'),
+            line=dict(color='#2E86C1', width=4),
+            marker=dict(size=3, color='#2E86C1'),
             name='Reference Trajectory',
+            showlegend=True,
+            legendgroup='reference',
             hovertemplate='<b>Reference</b><br>' +
                          'X: %{x:.4f} m<br>' +
                          'Y: %{y:.4f} m<br>' +
@@ -152,9 +154,11 @@ class TrajectoryComparison:
             y=self.data['actual_eef_pos_y'],
             z=self.data['actual_eef_pos_z'],
             mode='lines+markers',
-            line=dict(color='red', width=4),
-            marker=dict(size=3, color='red'),
+            line=dict(color='#E74C3C', width=4),
+            marker=dict(size=3, color='#E74C3C'),
             name='Actual Trajectory',
+            showlegend=True,
+            legendgroup='actual',
             hovertemplate='<b>Actual</b><br>' +
                          'X: %{x:.4f} m<br>' +
                          'Y: %{y:.4f} m<br>' +
@@ -168,9 +172,10 @@ class TrajectoryComparison:
             y=[self.data['ref_eef_pos_y'].iloc[0]],
             z=[self.data['ref_eef_pos_z'].iloc[0]],
             mode='markers',
-            marker=dict(size=8, color='green', symbol='diamond'),
+            marker=dict(size=8, color='#27AE60', symbol='diamond'),
             name='Start (Reference)',
-            showlegend=True
+            showlegend=True,
+            legendgroup='markers'
         ))
         
         fig.add_trace(go.Scatter3d(
@@ -178,9 +183,10 @@ class TrajectoryComparison:
             y=[self.data['actual_eef_pos_y'].iloc[0]],
             z=[self.data['actual_eef_pos_z'].iloc[0]],
             mode='markers',
-            marker=dict(size=8, color='orange', symbol='diamond'),
+            marker=dict(size=8, color='#F39C12', symbol='diamond'),
             name='Start (Actual)',
-            showlegend=True
+            showlegend=True,
+            legendgroup='markers'
         ))
         
         # End points
@@ -189,9 +195,10 @@ class TrajectoryComparison:
             y=[self.data['ref_eef_pos_y'].iloc[-1]],
             z=[self.data['ref_eef_pos_z'].iloc[-1]],
             mode='markers',
-            marker=dict(size=8, color='darkgreen', symbol='square'),
+            marker=dict(size=8, color='#1B4F72', symbol='square'),
             name='End (Reference)',
-            showlegend=True
+            showlegend=True,
+            legendgroup='markers'
         ))
         
         fig.add_trace(go.Scatter3d(
@@ -199,21 +206,44 @@ class TrajectoryComparison:
             y=[self.data['actual_eef_pos_y'].iloc[-1]],
             z=[self.data['actual_eef_pos_z'].iloc[-1]],
             mode='markers',
-            marker=dict(size=8, color='darkred', symbol='square'),
+            marker=dict(size=8, color='#922B21', symbol='square'),
             name='End (Actual)',
-            showlegend=True
+            showlegend=True,
+            legendgroup='markers'
         ))
         
         fig.update_layout(
-            title='3D End-Effector Trajectory Comparison',
+            title={
+                'text': f'<b>3D End-Effector Trajectory Comparison</b><br>' +
+                       f'<span style="font-size:14px; color:#666;">{os.path.basename(self.csv_file)}</span>',
+                'x': 0.5,
+                'xanchor': 'center',
+                'font': {'size': 20}
+            },
             scene=dict(
-                xaxis_title='X (m)',
-                yaxis_title='Y (m)',
-                zaxis_title='Z (m)',
+                xaxis_title='<b>X (m)</b>',
+                yaxis_title='<b>Y (m)</b>',
+                zaxis_title='<b>Z (m)</b>',
                 aspectmode='data',
                 camera=dict(eye=dict(x=1.5, y=1.5, z=1.5))
             ),
-            height=1000
+            height=1000,
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=-0.3,
+                xanchor="center",
+                x=0.5,
+                bgcolor='rgba(255,255,255,0.8)',
+                bordercolor='rgba(0,0,0,0.2)',
+                borderwidth=1,
+                font=dict(size=14),
+                groupclick="toggleitem"
+            ),
+            font=dict(family="Arial, sans-serif"),
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
         )
         
         return fig
@@ -222,11 +252,11 @@ class TrajectoryComparison:
         """Create position vs time comparison plot"""
         fig = make_subplots(
             rows=4, cols=1,
-            subplot_titles=('X Position', 'Y Position', 'Z Position', 'Position Error'),
+            subplot_titles=('<b>X Position</b>', '<b>Y Position</b>', '<b>Z Position</b>', '<b>Position Error</b>'),
             vertical_spacing=0.08
         )
         
-        colors = ['red', 'green', 'blue']
+        colors = ['#E74C3C', '#27AE60', '#3498DB']
         axes = ['x', 'y', 'z']
         
         for i, (axis, color) in enumerate(zip(axes, colors)):
@@ -235,9 +265,14 @@ class TrajectoryComparison:
                 x=self.data['playback_time'],
                 y=self.data[f'ref_eef_pos_{axis}'],
                 mode='lines',
-                name=f'Ref {axis.upper()}',
+                name=f'Reference {axis.upper()}',
                 line=dict(color=color, width=2),
-                legendgroup=f'pos_{axis}'
+                showlegend=True,
+                legendgroup='reference',
+                hovertemplate=f'<b>Reference {axis.upper()}</b><br>' +
+                             'Time: %{x:.2f} s<br>' +
+                             f'{axis.upper()}: %{{y:.4f}} m<br>' +
+                             '<extra></extra>'
             ), row=i+1, col=1)
             
             # Actual position
@@ -247,44 +282,88 @@ class TrajectoryComparison:
                 mode='lines',
                 name=f'Actual {axis.upper()}',
                 line=dict(color=color, width=2, dash='dash'),
-                legendgroup=f'pos_{axis}'
+                showlegend=True,
+                legendgroup='actual',
+                hovertemplate=f'<b>Actual {axis.upper()}</b><br>' +
+                             'Time: %{x:.2f} s<br>' +
+                             f'{axis.upper()}: %{{y:.4f}} m<br>' +
+                             '<extra></extra>'
             ), row=i+1, col=1)
-        
+    
         # Position error norm
         fig.add_trace(go.Scatter(
             x=self.data['playback_time'],
             y=self.data['pos_error_norm'],
             mode='lines',
             name='Position Error',
-            line=dict(color='black', width=3),
-            fill='tonexty' if len(fig.data) > 0 else None,
-            fillcolor='rgba(255,0,0,0.2)'
+            line=dict(color='#8E44AD', width=3),
+            fill='tonexty',
+            fillcolor='rgba(142, 68, 173, 0.1)',
+            showlegend=True,
+            legendgroup='errors',
+            hovertemplate='<b>Position Error</b><br>' +
+                         'Time: %{x:.2f} s<br>' +
+                         'Error: %{y:.4f} m<br>' +
+                         '<extra></extra>'
         ), row=4, col=1)
         
         # Update layout
         fig.update_layout(
-            title='End-Effector Position Comparison vs Time',
+            title={
+                'text': f'<b>End-Effector Position Comparison vs Time</b><br>' +
+                       f'<span style="font-size:14px; color:#666;">{os.path.basename(self.csv_file)}</span>',
+                'x': 0.5,
+                'xanchor': 'center',
+                'font': {'size': 20}
+            },
             height=800,
-            hovermode='x unified'
+            hovermode='x unified',
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=-0.3,
+                xanchor="center",
+                x=0.5,
+                bgcolor='rgba(255,255,255,0.8)',
+                bordercolor='rgba(0,0,0,0.2)',
+                borderwidth=1,
+                font=dict(size=14),
+                groupclick="toggleitem"
+            ),
+            font=dict(family="Arial, sans-serif"),
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
         )
         
+        # Update subplot titles to be centered
+        for i in fig['layout']['annotations']:
+            i['font'] = dict(size=14, color='#2C3E50')
+            i['xanchor'] = 'center'
+    
         # Update axis labels
         for i in range(1, 4):
-            fig.update_yaxes(title_text="Position (m)", row=i, col=1)
-        fig.update_yaxes(title_text="Error (m)", row=4, col=1)
-        fig.update_xaxes(title_text="Time (s)", row=4, col=1)
-        
+            fig.update_yaxes(title_text=f"<b>{axes[i-1].upper()} Position (m)</b>", row=i, col=1, 
+                            showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+            fig.update_xaxes(showgrid=True, gridcolor='rgba(128,128,128,0.2)', row=i, col=1)
+    
+        fig.update_yaxes(title_text="<b>Error (m)</b>", row=4, col=1, 
+                        showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        fig.update_xaxes(title_text="<b>Time (s)</b>", row=4, col=1, 
+                        showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+    
         return fig
     
     def create_quaternion_comparison_plot(self) -> go.Figure:
         """Create quaternion vs time comparison plot"""
         fig = make_subplots(
             rows=5, cols=1,
-            subplot_titles=('Quaternion X', 'Quaternion Y', 'Quaternion Z', 'Quaternion W', 'Orientation Error'),
+            subplot_titles=('<b>Quaternion X</b>', '<b>Quaternion Y</b>', '<b>Quaternion Z</b>', 
+                           '<b>Quaternion W</b>', '<b>Orientation Error</b>'),
             vertical_spacing=0.06
         )
         
-        colors = ['red', 'green', 'blue', 'orange']
+        colors = ['#E74C3C', '#27AE60', '#3498DB', '#F39C12']
         components = ['x', 'y', 'z', 'w']
         
         for i, (comp, color) in enumerate(zip(components, colors)):
@@ -293,9 +372,14 @@ class TrajectoryComparison:
                 x=self.data['playback_time'],
                 y=self.data[f'ref_eef_quat_{comp}'],
                 mode='lines',
-                name=f'Ref q{comp}',
+                name=f'Reference q{comp}',
                 line=dict(color=color, width=2),
-                legendgroup=f'quat_{comp}'
+                showlegend=True,
+                legendgroup='reference',
+                hovertemplate=f'<b>Reference q{comp}</b><br>' +
+                             'Time: %{x:.2f} s<br>' +
+                             f'q{comp}: %{{y:.4f}}<br>' +
+                             '<extra></extra>'
             ), row=i+1, col=1)
             
             # Actual quaternion
@@ -305,64 +389,120 @@ class TrajectoryComparison:
                 mode='lines',
                 name=f'Actual q{comp}',
                 line=dict(color=color, width=2, dash='dash'),
-                legendgroup=f'quat_{comp}'
+                showlegend=True,
+                legendgroup='actual',
+                hovertemplate=f'<b>Actual q{comp}</b><br>' +
+                             'Time: %{x:.2f} s<br>' +
+                             f'q{comp}: %{{y:.4f}}<br>' +
+                             '<extra></extra>'
             ), row=i+1, col=1)
-        
+    
         # Orientation error
         fig.add_trace(go.Scatter(
             x=self.data['playback_time'],
-            y=np.degrees(self.data['orientation_error_angle']),  # Convert to degrees
+            y=np.degrees(self.data['orientation_error_angle']),
             mode='lines',
             name='Orientation Error',
-            line=dict(color='black', width=3),
-            fill='tonexty' if len(fig.data) > 0 else None,
-            fillcolor='rgba(255,0,0,0.2)'
+            line=dict(color='#8E44AD', width=3),
+            fill='tonexty',
+            fillcolor='rgba(142, 68, 173, 0.1)',
+            showlegend=True,
+            legendgroup='errors',
+            hovertemplate='<b>Orientation Error</b><br>' +
+                         'Time: %{x:.2f} s<br>' +
+                         'Error: %{y:.2f} deg<br>' +
+                         '<extra></extra>'
         ), row=5, col=1)
         
         fig.update_layout(
-            title='End-Effector Quaternion Comparison vs Time',
+            title={
+                'text': f'<b>End-Effector Quaternion Comparison vs Time</b><br>' +
+                       f'<span style="font-size:14px; color:#666;">{os.path.basename(self.csv_file)}</span>',
+                'x': 0.5,
+                'xanchor': 'center',
+                'font': {'size': 20}
+            },
             height=1000,
-            hovermode='x unified'
+            hovermode='x unified',
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=-0.3,
+                xanchor="center",
+                x=0.5,
+                bgcolor='rgba(255,255,255,0.8)',
+                bordercolor='rgba(0,0,0,0.2)',
+                borderwidth=1,
+                font=dict(size=14),
+                groupclick="toggleitem"
+            ),
+            font=dict(family="Arial, sans-serif"),
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
         )
         
+        # Update subplot titles to be centered
+        for i in fig['layout']['annotations']:
+            i['font'] = dict(size=14, color='#2C3E50')
+            i['xanchor'] = 'center'
+    
         # Update axis labels
         for i in range(1, 5):
-            fig.update_yaxes(title_text="Quaternion", row=i, col=1)
-        fig.update_yaxes(title_text="Error (deg)", row=5, col=1)
-        fig.update_xaxes(title_text="Time (s)", row=5, col=1)
-        
+            fig.update_yaxes(title_text="<b>Quaternion</b>", row=i, col=1, 
+                            showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+            fig.update_xaxes(showgrid=True, gridcolor='rgba(128,128,128,0.2)', row=i, col=1)
+    
+        fig.update_yaxes(title_text="<b>Error (deg)</b>", row=5, col=1, 
+                        showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        fig.update_xaxes(title_text="<b>Time (s)</b>", row=5, col=1, 
+                        showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+    
         return fig
     
     def create_error_analysis_plot(self) -> go.Figure:
         """Create comprehensive error analysis plot"""
         fig = make_subplots(
             rows=2, cols=2,
-            subplot_titles=('Position Error Components', 'Position Error vs Time', 
-                          'Orientation Error vs Time', 'Error Statistics'),
+            subplot_titles=('<b>Position Error Components</b>', '<b>Position Error vs Time</b>', 
+                           '<b>Orientation Error vs Time</b>', '<b>Error Statistics</b>'),
             specs=[[{'type': 'scatter'}, {'type': 'scatter'}],
                    [{'type': 'scatter'}, {'type': 'bar'}]]
         )
         
         # Position error components
         error_components = ['pos_error_x', 'pos_error_y', 'pos_error_z']
-        error_colors = ['red', 'green', 'blue']
+        error_colors = ['#E74C3C', '#27AE60', '#3498DB']
         
         for comp, color in zip(error_components, error_colors):
+            axis_label = comp.split('_')[-1].upper()
             fig.add_trace(go.Scatter(
                 x=self.data['playback_time'],
                 y=self.data[comp] * 1000,  # Convert to mm
                 mode='lines',
-                name=f'Error {comp[-1].upper()}',
-                line=dict(color=color, width=2)
+                name=f'Error {axis_label}',
+                line=dict(color=color, width=2),
+                showlegend=True,
+                legendgroup='error_components',
+                hovertemplate=f'<b>Error {axis_label}</b><br>' +
+                             'Time: %{x:.2f} s<br>' +
+                             'Error: %{y:.2f} mm<br>' +
+                             '<extra></extra>'
             ), row=1, col=1)
-        
+    
         # Position error norm
         fig.add_trace(go.Scatter(
             x=self.data['playback_time'],
             y=self.data['pos_error_norm'] * 1000,  # Convert to mm
             mode='lines',
-            name='Position Error',
-            line=dict(color='black', width=3)
+            name='Position Error Norm',
+            line=dict(color='#8E44AD', width=3),
+            showlegend=True,
+            legendgroup='errors',
+            hovertemplate='<b>Position Error</b><br>' +
+                         'Time: %{x:.2f} s<br>' +
+                         'Error: %{y:.2f} mm<br>' +
+                         '<extra></extra>'
         ), row=1, col=2)
         
         # Orientation error
@@ -371,7 +511,13 @@ class TrajectoryComparison:
             y=np.degrees(self.data['orientation_error_angle']),
             mode='lines',
             name='Orientation Error',
-            line=dict(color='purple', width=3)
+            line=dict(color='#D35400', width=3),
+            showlegend=True,
+            legendgroup='errors',
+            hovertemplate='<b>Orientation Error</b><br>' +
+                         'Time: %{x:.2f} s<br>' +
+                         'Error: %{y:.2f} deg<br>' +
+                         '<extra></extra>'
         ), row=2, col=1)
         
         # Error statistics
@@ -391,41 +537,88 @@ class TrajectoryComparison:
             x=['Mean', 'Max', 'Std'],
             y=pos_error_stats,
             name='Position Error (mm)',
-            marker_color='lightblue',
-            yaxis='y4'
+            marker_color='#5DADE2',
+            showlegend=True,
+            legendgroup='statistics',
+            hovertemplate='<b>Position Error</b><br>' +
+                         'Statistic: %{x}<br>' +
+                         'Value: %{y:.2f} mm<br>' +
+                         '<extra></extra>'
         ), row=2, col=2)
         
         fig.add_trace(go.Bar(
             x=['Mean', 'Max', 'Std'],
             y=orient_error_stats,
             name='Orientation Error (deg)',
-            marker_color='lightcoral',
-            yaxis='y5'
+            marker_color='#F1948A',
+            showlegend=True,
+            legendgroup='statistics',
+            yaxis='y4',
+            hovertemplate='<b>Orientation Error</b><br>' +
+                         'Statistic: %{x}<br>' +
+                         'Value: %{y:.2f} deg<br>' +
+                         '<extra></extra>'
         ), row=2, col=2)
         
         # Update layout
         fig.update_layout(
-            title='Trajectory Following Error Analysis',
-            height=800
+            title={
+                'text': f'<b>Trajectory Following Error Analysis</b><br>' +
+                       f'<span style="font-size:14px; color:#666;">{os.path.basename(self.csv_file)}</span>',
+                'x': 0.5,
+                'xanchor': 'center',
+                'font': {'size': 20}
+            },
+            height=800,
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=-0.3,
+                xanchor="center",
+                x=0.5,
+                bgcolor='rgba(255,255,255,0.8)',
+                bordercolor='rgba(0,0,0,0.2)',
+                borderwidth=1,
+                font=dict(size=14),
+                groupclick="toggleitem"
+            ),
+            font=dict(family="Arial, sans-serif"),
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
         )
         
+        # Update subplot titles to be centered
+        for i in fig['layout']['annotations']:
+            i['font'] = dict(size=14, color='#2C3E50')
+            i['xanchor'] = 'center'
+    
         # Update axis labels
-        fig.update_yaxes(title_text="Error (mm)", row=1, col=1)
-        fig.update_yaxes(title_text="Error (mm)", row=1, col=2)
-        fig.update_yaxes(title_text="Error (deg)", row=2, col=1)
-        fig.update_yaxes(title_text="Error", row=2, col=2)
-        fig.update_xaxes(title_text="Time (s)", row=1, col=1)
-        fig.update_xaxes(title_text="Time (s)", row=1, col=2)
-        fig.update_xaxes(title_text="Time (s)", row=2, col=1)
-        fig.update_xaxes(title_text="Statistic", row=2, col=2)
-        
+        fig.update_yaxes(title_text="<b>Error (mm)</b>", row=1, col=1, 
+                        showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        fig.update_yaxes(title_text="<b>Error (mm)</b>", row=1, col=2, 
+                        showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        fig.update_yaxes(title_text="<b>Error (deg)</b>", row=2, col=1, 
+                        showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        fig.update_yaxes(title_text="<b>Error</b>", row=2, col=2, 
+                        showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+    
+        fig.update_xaxes(title_text="<b>Time (s)</b>", row=1, col=1, 
+                        showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        fig.update_xaxes(title_text="<b>Time (s)</b>", row=1, col=2, 
+                        showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        fig.update_xaxes(title_text="<b>Time (s)</b>", row=2, col=1, 
+                        showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        fig.update_xaxes(title_text="<b>Statistic</b>", row=2, col=2, 
+                        showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+    
         return fig
     
     def create_velocity_comparison_plot(self) -> go.Figure:
         """Create velocity comparison plot"""
         fig = make_subplots(
             rows=2, cols=1,
-            subplot_titles=('Velocity Comparison', 'Velocity Error'),
+            subplot_titles=('<b>Velocity Comparison</b>', '<b>Velocity Error</b>'),
             vertical_spacing=0.15
         )
         
@@ -435,7 +628,13 @@ class TrajectoryComparison:
             y=self.data['ref_vel_norm'],
             mode='lines',
             name='Reference Velocity',
-            line=dict(color='blue', width=2)
+            line=dict(color='#2E86C1', width=2),
+            showlegend=True,
+            legendgroup='velocities',
+            hovertemplate='<b>Reference Velocity</b><br>' +
+                         'Time: %{x:.2f} s<br>' +
+                         'Velocity: %{y:.4f} m/s<br>' +
+                         '<extra></extra>'
         ), row=1, col=1)
         
         fig.add_trace(go.Scatter(
@@ -443,7 +642,13 @@ class TrajectoryComparison:
             y=self.data['actual_vel_norm'],
             mode='lines',
             name='Actual Velocity',
-            line=dict(color='red', width=2, dash='dash')
+            line=dict(color='#E74C3C', width=2, dash='dash'),
+            showlegend=True,
+            legendgroup='velocities',
+            hovertemplate='<b>Actual Velocity</b><br>' +
+                         'Time: %{x:.2f} s<br>' +
+                         'Velocity: %{y:.4f} m/s<br>' +
+                         '<extra></extra>'
         ), row=1, col=1)
         
         # Velocity error
@@ -453,18 +658,56 @@ class TrajectoryComparison:
             y=vel_error,
             mode='lines',
             name='Velocity Error',
-            line=dict(color='black', width=2),
-            fill='tonexty'
+            line=dict(color='#8E44AD', width=3),
+            fill='tonexty',
+            fillcolor='rgba(142, 68, 173, 0.1)',
+            showlegend=True,
+            legendgroup='errors',
+            hovertemplate='<b>Velocity Error</b><br>' +
+                         'Time: %{x:.2f} s<br>' +
+                         'Error: %{y:.4f} m/s<br>' +
+                         '<extra></extra>'
         ), row=2, col=1)
         
         fig.update_layout(
-            title='End-Effector Velocity Comparison',
-            height=600
+            title={
+                'text': f'<b>End-Effector Velocity Comparison</b><br>' +
+                       f'<span style="font-size:14px; color:#666;">{os.path.basename(self.csv_file)}</span>',
+                'x': 0.5,
+                'xanchor': 'center',
+                'font': {'size': 20}
+            },
+            height=600,
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=-0.3,
+                xanchor="center",
+                x=0.5,
+                bgcolor='rgba(255,255,255,0.8)',
+                bordercolor='rgba(0,0,0,0.2)',
+                borderwidth=1,
+                font=dict(size=11),
+                groupclick="toggleitem"
+            ),
+            font=dict(family="Arial, sans-serif"),
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
         )
         
-        fig.update_yaxes(title_text="Velocity (m/s)", row=1, col=1)
-        fig.update_yaxes(title_text="Velocity Error (m/s)", row=2, col=1)
-        fig.update_xaxes(title_text="Time (s)", row=2, col=1)
+        # Update subplot titles to be centered
+        for i in fig['layout']['annotations']:
+            i['font'] = dict(size=14, color='#2C3E50')
+            i['xanchor'] = 'center'
+    
+        fig.update_yaxes(title_text="<b>Velocity (m/s)</b>", row=1, col=1, 
+                        showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        fig.update_yaxes(title_text="<b>Velocity Error (m/s)</b>", row=2, col=1, 
+                        showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        fig.update_xaxes(title_text="<b>Time (s)</b>", row=2, col=1, 
+                        showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        fig.update_xaxes(showgrid=True, gridcolor='rgba(128,128,128,0.2)', row=1, col=1)
         
         return fig
     
@@ -472,12 +715,18 @@ class TrajectoryComparison:
         """Create a comprehensive dashboard with key metrics"""
         fig = make_subplots(
             rows=2, cols=3,
-            subplot_titles=('3D Trajectory', 'Position Tracking', 'Orientation Tracking',
-                          'Position Error', 'Orientation Error', 'Summary Statistics'),
+            subplot_titles=(
+                '<b>3D Trajectory Comparison</b>', 
+                '<b>Z-Position Tracking</b>', 
+                '<b>Quaternion Magnitude</b>',
+                '<b>Position Error</b>', 
+                '<b>Orientation Error</b>', 
+                '<b>Performance Summary</b>'
+            ),
             specs=[[{'type': 'scatter3d'}, {'type': 'scatter'}, {'type': 'scatter'}],
                    [{'type': 'scatter'}, {'type': 'scatter'}, {'type': 'bar'}]],
             horizontal_spacing=0.08,
-            vertical_spacing=0.12
+            vertical_spacing=0.15
         )
         
         # 3D trajectory (simplified)
@@ -486,9 +735,10 @@ class TrajectoryComparison:
             y=self.data['ref_eef_pos_y'],
             z=self.data['ref_eef_pos_z'],
             mode='lines',
-            line=dict(color='blue', width=4),
-            name='Reference',
-            showlegend=False
+            line=dict(color='#2E86C1', width=4),
+            name='Reference Trajectory',
+            showlegend=True,
+            legendgroup='reference'
         ), row=1, col=1)
         
         fig.add_trace(go.Scatter3d(
@@ -496,9 +746,10 @@ class TrajectoryComparison:
             y=self.data['actual_eef_pos_y'],
             z=self.data['actual_eef_pos_z'],
             mode='lines',
-            line=dict(color='red', width=4),
-            name='Actual',
-            showlegend=False
+            line=dict(color='#E74C3C', width=4),
+            name='Actual Trajectory',
+            showlegend=True,
+            legendgroup='actual'
         ), row=1, col=1)
         
         # Position tracking (Z only for simplicity)
@@ -506,9 +757,10 @@ class TrajectoryComparison:
             x=self.data['playback_time'],
             y=self.data['ref_eef_pos_z'],
             mode='lines',
-            name='Ref Z',
-            line=dict(color='blue', width=2),
-            showlegend=False
+            name='Reference Z',
+            line=dict(color='#2E86C1', width=2),
+            showlegend=True,
+            legendgroup='reference'
         ), row=1, col=2)
         
         fig.add_trace(go.Scatter(
@@ -516,8 +768,9 @@ class TrajectoryComparison:
             y=self.data['actual_eef_pos_z'],
             mode='lines',
             name='Actual Z',
-            line=dict(color='red', width=2, dash='dash'),
-            showlegend=False
+            line=dict(color='#E74C3C', width=2, dash='dash'),
+            showlegend=True,
+            legendgroup='actual'
         ), row=1, col=2)
         
         # Orientation tracking (quaternion magnitude)
@@ -534,9 +787,10 @@ class TrajectoryComparison:
             x=self.data['playback_time'],
             y=ref_quat_mag,
             mode='lines',
-            name='Ref |q|',
-            line=dict(color='blue', width=2),
-            showlegend=False
+            name='Reference |q|',
+            line=dict(color='#2E86C1', width=2),
+            showlegend=True,
+            legendgroup='reference'
         ), row=1, col=3)
         
         fig.add_trace(go.Scatter(
@@ -544,8 +798,9 @@ class TrajectoryComparison:
             y=actual_quat_mag,
             mode='lines',
             name='Actual |q|',
-            line=dict(color='red', width=2, dash='dash'),
-            showlegend=False
+            line=dict(color='#E74C3C', width=2, dash='dash'),
+            showlegend=True,
+            legendgroup='actual'
         ), row=1, col=3)
         
         # Position error
@@ -553,9 +808,12 @@ class TrajectoryComparison:
             x=self.data['playback_time'],
             y=self.data['pos_error_norm'] * 1000,
             mode='lines',
-            name='Pos Error',
-            line=dict(color='black', width=2),
-            showlegend=False
+            name='Position Error',
+            line=dict(color='#8E44AD', width=3),
+            showlegend=True,
+            legendgroup='errors',
+            fill='tonexty',
+            fillcolor='rgba(142, 68, 173, 0.1)'
         ), row=2, col=1)
         
         # Orientation error
@@ -563,13 +821,16 @@ class TrajectoryComparison:
             x=self.data['playback_time'],
             y=np.degrees(self.data['orientation_error_angle']),
             mode='lines',
-            name='Orient Error',
-            line=dict(color='purple', width=2),
-            showlegend=False
+            name='Orientation Error',
+            line=dict(color='#D35400', width=3),
+            showlegend=True,
+            legendgroup='errors',
+            fill='tonexty',
+            fillcolor='rgba(211, 84, 0, 0.1)'
         ), row=2, col=2)
         
         # Summary statistics
-        metrics = ['Pos RMSE (mm)', 'Pos Max (mm)', 'Orient RMSE (deg)', 'Orient Max (deg)']
+        metrics = ['Pos RMSE\n(mm)', 'Pos Max\n(mm)', 'Orient RMSE\n(deg)', 'Orient Max\n(deg)']
         values = [
             np.sqrt(np.mean(self.data['pos_error_norm']**2)) * 1000,
             self.data['pos_error_norm'].max() * 1000,
@@ -577,20 +838,87 @@ class TrajectoryComparison:
             np.degrees(self.data['orientation_error_angle'].max())
         ]
         
+        # Create grouped bar chart with better colors
         fig.add_trace(go.Bar(
-            x=metrics,
-            y=values,
-            marker_color=['lightblue', 'blue', 'lightcoral', 'red'],
-            showlegend=False
+            x=metrics[:2],
+            y=values[:2],
+            name='Position Metrics',
+            marker_color='#5DADE2',
+            showlegend=True,
+            legendgroup='metrics',
+            hovertemplate='<b>%{x}</b><br>Value: %{y:.2f}<extra></extra>'
         ), row=2, col=3)
         
+        fig.add_trace(go.Bar(
+            x=metrics[2:],
+            y=values[2:],
+            name='Orientation Metrics',
+            marker_color='#F1948A',
+            showlegend=True,
+            legendgroup='metrics',
+            hovertemplate='<b>%{x}</b><br>Value: %{y:.2f}<extra></extra>'
+        ), row=2, col=3)
+        
+        # Update layout with centered title and improved styling
         fig.update_layout(
-            title=f'Trajectory Comparison Dashboard - {os.path.basename(self.csv_file)}',
-            height=800
+            title={
+                'text': f'<b>Trajectory Following Performance Dashboard</b><br>' +
+                       f'<span style="font-size:14px; color:#666;">{os.path.basename(self.csv_file)}</span>',
+                'x': 0.5,
+                'xanchor': 'center',
+                'font': {'size': 20}
+            },
+            height=900,
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=-0.3,
+                xanchor="center",
+                x=0.5,
+                bgcolor='rgba(255,255,255,0.8)',
+                bordercolor='rgba(0,0,0,0.2)',
+                borderwidth=1,
+                font=dict(size=14),
+                groupclick="toggleitem"
+            ),
+            font=dict(family="Arial, sans-serif"),
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
         )
         
+        # Update subplot titles to be centered
+        for i in fig['layout']['annotations']:
+            i['font'] = dict(size=14, color='#2C3E50')
+            i['xanchor'] = 'center'
+        
+        # Update 3D scene
+        fig.update_scenes(
+            xaxis_title='<b>X (m)</b>',
+            yaxis_title='<b>Y (m)</b>',
+            zaxis_title='<b>Z (m)</b>',
+            aspectmode='cube',
+            camera=dict(eye=dict(x=1.3, y=1.3, z=1.3))
+        )
+        
+        # Update axis labels with better formatting
+        fig.update_xaxes(title_text="<b>Time (s)</b>", row=1, col=2, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        fig.update_yaxes(title_text="<b>Z Position (m)</b>", row=1, col=2, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        
+        fig.update_xaxes(title_text="<b>Time (s)</b>", row=1, col=3, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        fig.update_yaxes(title_text="<b>Quaternion Magnitude</b>", row=1, col=3, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        
+        fig.update_xaxes(title_text="<b>Time (s)</b>", row=2, col=1, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        fig.update_yaxes(title_text="<b>Error (mm)</b>", row=2, col=1, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        
+        fig.update_xaxes(title_text="<b>Time (s)</b>", row=2, col=2, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        fig.update_yaxes(title_text="<b>Error (degrees)</b>", row=2, col=2, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        
+        fig.update_xaxes(title_text="<b>Performance Metrics</b>", row=2, col=3, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        fig.update_yaxes(title_text="<b>Value</b>", row=2, col=3, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+        
         return fig
-    
+
     def print_statistics(self):
         """Print comprehensive trajectory following statistics"""
         print("\n" + "="*80)
