@@ -214,8 +214,8 @@ class TrajectoryComparison:
         
         fig.update_layout(
             title={
-                'text': f'<b>3D End-Effector Trajectory Comparison</b><br>' +
-                       f'<span style="font-size:14px; color:#666;">{os.path.basename(self.csv_file)}</span>',
+                'text': f'<b>3D End-Effector Trajectory Comparison</b><br>', #+
+                       #f'<span style="font-size:14px; color:#666;">{os.path.basename(self.csv_file)}</span>',
                 'x': 0.5,
                 'xanchor': 'center',
                 'font': {'size': 20}
@@ -251,9 +251,9 @@ class TrajectoryComparison:
     def create_position_comparison_plot(self) -> go.Figure:
         """Create position vs time comparison plot"""
         fig = make_subplots(
-            rows=4, cols=1,
-            subplot_titles=('<b>X Position</b>', '<b>Y Position</b>', '<b>Z Position</b>', '<b>Position Error</b>'),
-            vertical_spacing=0.08
+            rows=3, cols=1,
+            subplot_titles=('<b>X Position</b>', '<b>Y Position</b>', '<b>Z Position</b>'),
+            vertical_spacing=0.10
         )
         
         colors = ['#E74C3C', '#27AE60', '#3498DB']
@@ -289,34 +289,17 @@ class TrajectoryComparison:
                              f'{axis.upper()}: %{{y:.4f}} m<br>' +
                              '<extra></extra>'
             ), row=i+1, col=1)
-    
-        # Position error norm
-        fig.add_trace(go.Scatter(
-            x=self.data['playback_time'],
-            y=self.data['pos_error_norm'],
-            mode='lines',
-            name='Position Error',
-            line=dict(color='#8E44AD', width=3),
-            fill='tonexty',
-            fillcolor='rgba(142, 68, 173, 0.1)',
-            showlegend=True,
-            legendgroup='errors',
-            hovertemplate='<b>Position Error</b><br>' +
-                         'Time: %{x:.2f} s<br>' +
-                         'Error: %{y:.4f} m<br>' +
-                         '<extra></extra>'
-        ), row=4, col=1)
-        
+
         # Update layout
         fig.update_layout(
             title={
-                'text': f'<b>End-Effector Position Comparison vs Time</b><br>' +
-                       f'<span style="font-size:14px; color:#666;">{os.path.basename(self.csv_file)}</span>',
+                'text': f'<b>End-Effector Position Comparison vs Time</b><br>', #+
+                       #f'<span style="font-size:14px; color:#666;">{os.path.basename(self.csv_file)}</span>',
                 'x': 0.5,
                 'xanchor': 'center',
                 'font': {'size': 20}
             },
-            height=800,
+            height=700,
             hovermode='x unified',
             showlegend=True,
             legend=dict(
@@ -340,18 +323,17 @@ class TrajectoryComparison:
         for i in fig['layout']['annotations']:
             i['font'] = dict(size=14, color='#2C3E50')
             i['xanchor'] = 'center'
-    
+
         # Update axis labels
         for i in range(1, 4):
             fig.update_yaxes(title_text=f"<b>{axes[i-1].upper()} Position (m)</b>", row=i, col=1, 
                             showgrid=True, gridcolor='rgba(128,128,128,0.2)')
             fig.update_xaxes(showgrid=True, gridcolor='rgba(128,128,128,0.2)', row=i, col=1)
-    
-        fig.update_yaxes(title_text="<b>Error (m)</b>", row=4, col=1, 
+
+        # Update the bottom subplot's X-axis with time label
+        fig.update_xaxes(title_text="<b>Time (s)</b>", row=3, col=1, 
                         showgrid=True, gridcolor='rgba(128,128,128,0.2)')
-        fig.update_xaxes(title_text="<b>Time (s)</b>", row=4, col=1, 
-                        showgrid=True, gridcolor='rgba(128,128,128,0.2)')
-    
+
         return fig
     
     def create_quaternion_comparison_plot(self) -> go.Figure:
@@ -1010,6 +992,115 @@ class TrajectoryComparison:
         
         return np.sum(distances)
 
+    def save_publication_plots(self, output_dir: str, base_name: str):
+        """Save plots optimized for scientific publication"""
+        
+        # Publication settings for different journal formats
+        configs = {
+            'single_column': {
+                'width': 350,    # Single column width (mm → pixels)
+                'height': 250,
+                'scale': 4,      # Very high resolution
+                'format': 'pdf'
+            },
+            'double_column': {
+                'width': 700,    # Double column width
+                'height': 500,
+                'scale': 3,
+                'format': 'pdf'
+            },
+            'full_page': {
+                'width': 1000,   # Full page width
+                'height': 700,
+                'scale': 3,
+                'format': 'pdf'
+            }
+        }
+        
+        # Clean plots for publication (remove backgrounds, optimize fonts)
+        publication_layout = {
+            'font': dict(family="Times New Roman", size=12),  # Standard academic font
+            'plot_bgcolor': 'white',
+            'paper_bgcolor': 'white',
+            'margin': dict(l=60, r=20, t=60, b=60),  # Proper margins
+        }
+        
+        # Update all figures with publication layout
+        plots = {
+            'position_comparison': self.create_position_comparison_plot(),
+            'error_analysis': self.create_error_analysis_plot(),
+            'velocity_comparison': self.create_velocity_comparison_plot(),
+            '3d_trajectory': self.create_3d_trajectory_comparison()
+        }
+        
+        for plot_name, fig in plots.items():
+            fig.update_layout(**publication_layout)
+            
+            # Choose appropriate size based on plot complexity
+            if plot_name in ['position_comparison', 'error_analysis']:
+                config = configs['double_column']
+            elif plot_name == 'velocity_comparison':
+                config = configs['single_column'] 
+            else:
+                config = configs['full_page']
+            
+            # Save with publication naming convention
+            filename = f"{base_name}_{plot_name}_publication.pdf"
+            fig.write_image(os.path.join(output_dir, filename), **config)
+        
+        print("📚 Publication-ready plots saved with academic formatting")
+        print("💾 Saving publication-quality PDF plots...")
+    
+        # Publication-quality PDF settings
+        pdf_config = {
+            'width': 1200,      # Publication width
+            'height': 800,      # Publication height  
+            'scale': 3,         # High resolution scaling (300 DPI equivalent)
+            'format': 'pdf',
+            'engine': 'kaleido'
+        }
+        
+        try:
+            print("📄 Saving 2D plots as PDF...")
+            plots['position_comparison'].write_image(os.path.join(output_dir, f"{base_name}_position_comparison.pdf"), **pdf_config)
+            plots['quaternion_comparison'].write_image(os.path.join(output_dir, f"{base_name}_quaternion_comparison.pdf"), **pdf_config)
+            plots['error_analysis'].write_image(os.path.join(output_dir, f"{base_name}_error_analysis.pdf"), **pdf_config)
+            plots['velocity_comparison'].write_image(os.path.join(output_dir, f"{base_name}_velocity_comparison.pdf"), **pdf_config)
+            
+            # For 3D plot, save as static PDF view
+            plots['3d_trajectory'].write_image(os.path.join(output_dir, f"{base_name}_3d_trajectory.pdf"), **pdf_config)
+            
+            # Dashboard as PDF (will be static but readable)
+            plots['dashboard'].write_image(os.path.join(output_dir, f"{base_name}_dashboard.pdf"), 
+                                        width=1600, height=1200, scale=2, format='pdf')
+            
+            print("✅ Publication-quality PDF plots saved successfully")
+            print(f"📁 Files saved to: {output_dir}/")
+            
+            # List the saved files
+            saved_files = [
+                f"{base_name}_position_comparison.pdf",
+                f"{base_name}_quaternion_comparison.pdf", 
+                f"{base_name}_error_analysis.pdf",
+                f"{base_name}_velocity_comparison.pdf",
+                f"{base_name}_3d_trajectory.pdf",
+                f"{base_name}_dashboard.pdf"
+            ]
+            
+            print("📄 PDF files created:")
+            for file in saved_files:
+                file_path = os.path.join(output_dir, file)
+                if os.path.exists(file_path):
+                    print(f"  ✅ {file}")
+                else:
+                    print(f"  ❌ {file} - FAILED")
+            
+        except Exception as e:
+            print(f"⚠️ Could not save PDF plots: {e}")
+            print("💡 Make sure 'kaleido' is installed: pip install kaleido")
+            print("💡 Check write permissions for the output directory")
+            import traceback
+            traceback.print_exc()
 
 def main():
     parser = argparse.ArgumentParser(description="Trajectory Comparison Visualization")
@@ -1021,6 +1112,8 @@ def main():
                        help="Show interactive plots in browser")
     parser.add_argument("--stats", action="store_true", default=True,
                        help="Print trajectory statistics")
+    parser.add_argument("--format", type=str, choices=['html', 'pdf', 'both'], default='html',
+                       help="Output format: html, pdf, or both")
     
     args = parser.parse_args()
     
@@ -1075,14 +1168,70 @@ def main():
             os.makedirs(args.output, exist_ok=True)
             base_name = os.path.splitext(os.path.basename(args.csv))[0]
             
-            print(f"💾 Saving plots to {args.output}/...")
-            traj_3d_fig.write_html(os.path.join(args.output, f"{base_name}_3d_trajectory.html"))
-            pos_fig.write_html(os.path.join(args.output, f"{base_name}_position_comparison.html"))
-            quat_fig.write_html(os.path.join(args.output, f"{base_name}_quaternion_comparison.html"))
-            error_fig.write_html(os.path.join(args.output, f"{base_name}_error_analysis.html"))
-            vel_fig.write_html(os.path.join(args.output, f"{base_name}_velocity_comparison.html"))
-            dashboard_fig.write_html(os.path.join(args.output, f"{base_name}_dashboard.html"))
-            print("✅ All plots saved successfully")
+            print(f"💾 Saving plots to {args.output}/ in {args.format} format...")
+            
+            if args.format in ['html', 'both']:
+                traj_3d_fig.write_html(os.path.join(args.output, f"{base_name}_3d_trajectory.html"))
+                pos_fig.write_html(os.path.join(args.output, f"{base_name}_position_comparison.html"))
+                quat_fig.write_html(os.path.join(args.output, f"{base_name}_quaternion_comparison.html"))
+                error_fig.write_html(os.path.join(args.output, f"{base_name}_error_analysis.html"))
+                vel_fig.write_html(os.path.join(args.output, f"{base_name}_velocity_comparison.html"))
+                dashboard_fig.write_html(os.path.join(args.output, f"{base_name}_dashboard.html"))
+                print("✅ HTML plots saved successfully")
+            
+            if args.format in ['pdf', 'both']:
+                print("💾 Saving publication-quality PDF plots...")
+                
+                # Publication-quality PDF settings
+                pdf_config = {
+                    'width': 1200,      # Publication width
+                    'height': 800,      # Publication height  
+                    'scale': 3,         # High resolution scaling (300 DPI equivalent)
+                    'format': 'pdf',
+                    'engine': 'kaleido'
+                }
+                
+                try:
+                    print("📄 Saving 2D plots as PDF...")
+                    pos_fig.write_image(os.path.join(args.output, f"{base_name}_position_comparison.pdf"), **pdf_config)
+                    quat_fig.write_image(os.path.join(args.output, f"{base_name}_quaternion_comparison.pdf"), **pdf_config)
+                    error_fig.write_image(os.path.join(args.output, f"{base_name}_error_analysis.pdf"), **pdf_config)
+                    vel_fig.write_image(os.path.join(args.output, f"{base_name}_velocity_comparison.pdf"), **pdf_config)
+                    
+                    # For 3D plot, save as static PDF view
+                    traj_3d_fig.write_image(os.path.join(args.output, f"{base_name}_3d_trajectory.pdf"), **pdf_config)
+                    
+                    # Dashboard as PDF (will be static but readable)
+                    dashboard_fig.write_image(os.path.join(args.output, f"{base_name}_dashboard.pdf"), 
+                                            width=1600, height=1200, scale=2, format='pdf')
+                    
+                    print("✅ Publication-quality PDF plots saved successfully")
+                    print(f"📁 Files saved to: {args.output}/")
+                    
+                    # List the saved files
+                    saved_files = [
+                        f"{base_name}_position_comparison.pdf",
+                        f"{base_name}_quaternion_comparison.pdf", 
+                        f"{base_name}_error_analysis.pdf",
+                        f"{base_name}_velocity_comparison.pdf",
+                        f"{base_name}_3d_trajectory.pdf",
+                        f"{base_name}_dashboard.pdf"
+                    ]
+                    
+                    print("📄 PDF files created:")
+                    for file in saved_files:
+                        file_path = os.path.join(args.output, file)
+                        if os.path.exists(file_path):
+                            print(f"  ✅ {file}")
+                        else:
+                            print(f"  ❌ {file} - FAILED")
+                    
+                except Exception as e:
+                    print(f"⚠️ Could not save PDF plots: {e}")
+                    print("💡 Make sure 'kaleido' is installed: pip install kaleido")
+                    print("💡 Check write permissions for the output directory")
+                    import traceback
+                    traceback.print_exc()
         
         # Show plots if requested
         if args.show:

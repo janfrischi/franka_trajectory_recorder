@@ -645,7 +645,7 @@ class MultiTrajectoryPlayback(Node):
         self.recorded_data.append(recording_data)
 
     def record_comparison_data(self, reference_pose, reference_gripper_state):
-        """Record comparison between reference and actual (same logic as original)"""
+        """Record comparison between reference and actual (with corrected quaternion conventions)"""
         if not self.record_data or self.current_eef_pose is None:
             return
 
@@ -654,22 +654,30 @@ class MultiTrajectoryPlayback(Node):
 
         # Reference values
         ref_pos = reference_pose[:3]
-        ref_quat = reference_pose[3:7]  # [qx, qy, qz, qw]
+        ref_quat_isaac = reference_pose[3:7]  # [qw, qx, qy, qz] from HDF5
+        
+        # Convert isaac quaternion from [qw, qx, qy, qz] to [qx, qy, qz, qw]
+        ref_quat = np.array([
+            ref_quat_isaac[1],  # qx (was at index 1)
+            ref_quat_isaac[2],  # qy (was at index 2)
+            ref_quat_isaac[3],  # qz (was at index 3)
+            ref_quat_isaac[0]   # qw (was at index 0)
+        ])
 
-        # Actual values
+        # Actual values (already in [qx, qy, qz, qw] convention)
         actual_pos = np.array([
             self.current_eef_pose.pose.position.x,
             self.current_eef_pose.pose.position.y,
             self.current_eef_pose.pose.position.z
         ])
         actual_quat = np.array([
-            self.current_eef_pose.pose.orientation.x,
-            self.current_eef_pose.pose.orientation.y,
-            self.current_eef_pose.pose.orientation.z,
-            self.current_eef_pose.pose.orientation.w
+            self.current_eef_pose.pose.orientation.x,  # qx
+            self.current_eef_pose.pose.orientation.y,  # qy
+            self.current_eef_pose.pose.orientation.z,  # qz
+            self.current_eef_pose.pose.orientation.w   # qw
         ])
 
-        # Calculate errors
+        # Calculate errors (now both quaternions are in same convention [qx, qy, qz, qw])
         pos_error = actual_pos - ref_pos
         pos_error_norm = np.linalg.norm(pos_error)
         quat_error = actual_quat - ref_quat
@@ -680,17 +688,17 @@ class MultiTrajectoryPlayback(Node):
             'playback_time': playback_time,
             'step_index': self.current_step_index,
             'demo_name': self.current_demo_name,
-            # Reference
+            # Reference (converted to [qx, qy, qz, qw] for consistency)
             'ref_eef_pos_x': ref_pos[0], 'ref_eef_pos_y': ref_pos[1], 'ref_eef_pos_z': ref_pos[2],
             'ref_eef_quat_x': ref_quat[0], 'ref_eef_quat_y': ref_quat[1], 
             'ref_eef_quat_z': ref_quat[2], 'ref_eef_quat_w': ref_quat[3],
             'ref_gripper_state': reference_gripper_state,
-            # Actual
+            # Actual (already in [qx, qy, qz, qw])
             'actual_eef_pos_x': actual_pos[0], 'actual_eef_pos_y': actual_pos[1], 'actual_eef_pos_z': actual_pos[2],
             'actual_eef_quat_x': actual_quat[0], 'actual_eef_quat_y': actual_quat[1], 
             'actual_eef_quat_z': actual_quat[2], 'actual_eef_quat_w': actual_quat[3],
             'actual_gripper_width': self.current_gripper_width if self.current_gripper_width else 0.0,
-            # Errors
+            # Errors (now calculated correctly with matching conventions)
             'pos_error_x': pos_error[0], 'pos_error_y': pos_error[1], 'pos_error_z': pos_error[2],
             'pos_error_norm': pos_error_norm,
             'quat_error_x': quat_error[0], 'quat_error_y': quat_error[1], 
